@@ -1,0 +1,26 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 20,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "desktop-debug",
+      "displayName": "Desktop Debug",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/desktop-debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "desktop-debug",
+      "configurePreset": "desktop-debug"
+    }
+  ]
+}

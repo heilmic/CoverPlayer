@@ -1,0 +1,67 @@
+#include "platform/sdl/sdl_input.hpp"
+
+#include <SDL.h>
+
+#include <iostream>
+
+namespace {
+
+bool pushStartEvent(Uint32 type) {
+    SDL_Event event{};
+    event.type = type;
+    event.cbutton.type = type;
+    event.cbutton.button = SDL_CONTROLLER_BUTTON_START;
+    return SDL_PushEvent(&event) == 1;
+}
+
+} // namespace
+
+#ifdef _WIN32
+int SDL_main(int, char**) {
+#else
+int main() {
+#endif
+    if (SDL_Init(SDL_INIT_EVENTS | SDL_INIT_GAMECONTROLLER) != 0) {
+        std::cerr << "SDL_Init failed: " << SDL_GetError() << '\n';
+        return 1;
+    }
+
+    {
+        coverplayer::platform::SdlInput input;
+        if (!pushStartEvent(SDL_CONTROLLERBUTTONDOWN)) return 1;
+        const auto pressed = input.poll(coverplayer::platform::Screen::Player, false);
+        if (pressed.cycleSleepTimer || pressed.background) {
+            std::cerr << "pressing START immediately triggered an action\n";
+            return 1;
+        }
+
+        if (!pushStartEvent(SDL_CONTROLLERBUTTONUP)) return 1;
+        const auto released = input.poll(coverplayer::platform::Screen::Player, false);
+        if (!released.cycleSleepTimer || released.background) {
+            std::cerr << "short START did not exclusively trigger the sleep timer\n";
+            return 1;
+        }
+    }
+
+    {
+        coverplayer::platform::SdlInput input;
+        if (!pushStartEvent(SDL_CONTROLLERBUTTONDOWN)) return 1;
+        static_cast<void>(input.poll(coverplayer::platform::Screen::Player, false));
+        SDL_Delay(2050);
+        const auto held = input.poll(coverplayer::platform::Screen::Player, false);
+        if (!held.background || held.cycleSleepTimer) {
+            std::cerr << "long START did not exclusively trigger background playback\n";
+            return 1;
+        }
+
+        if (!pushStartEvent(SDL_CONTROLLERBUTTONUP)) return 1;
+        const auto released = input.poll(coverplayer::platform::Screen::Player, false);
+        if (released.background || released.cycleSleepTimer) {
+            std::cerr << "releasing long START triggered a second action\n";
+            return 1;
+        }
+    }
+
+    SDL_Quit();
+    return 0;
+}

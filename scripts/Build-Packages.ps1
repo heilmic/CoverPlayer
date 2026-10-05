@@ -1,0 +1,123 @@
+[CmdletBinding()]
+param()
+
+$ErrorActionPreference = 'Stop'
+$repositoryRoot = Split-Path -Parent $PSScriptRoot
+$buildRoot = Join-Path $repositoryRoot 'build'
+$binary = Join-Path $buildRoot 'arm64-release/coverplayer'
+$stagingRoot = Join-Path $buildRoot 'staging'
+$releaseRoot = Join-Path $buildRoot 'release'
+
+& "$PSScriptRoot/Build-Arm64.ps1"
+if (!(Test-Path -LiteralPath $binary)) { throw 'ARM64 binary is missing.' }
+
+if (Test-Path -LiteralPath $stagingRoot) { Remove-Item -LiteralPath $stagingRoot -Recurse -Force }
+if (Test-Path -LiteralPath $releaseRoot) { Remove-Item -LiteralPath $releaseRoot -Recurse -Force }
+New-Item -ItemType Directory -Force -Path $stagingRoot,$releaseRoot | Out-Null
+
+function Copy-AppPayload([string]$destination) {
+    New-Item -ItemType Directory -Force -Path "$destination/bin","$destination/libs","$destination/assets/fonts","$destination/licenses" | Out-Null
+    Copy-Item -LiteralPath $binary -Destination "$destination/bin/coverplayer"
+    Copy-Item -LiteralPath "$repositoryRoot/assets/fonts/RobotoMono-Bold.ttf" -Destination "$destination/assets/fonts/RobotoMono-Bold.ttf"
+    Copy-Item -LiteralPath "$repositoryRoot/LICENSE","$repositoryRoot/THIRD_PARTY_NOTICES.md" -Destination $destination
+    Copy-Item -LiteralPath "$repositoryRoot/packaging/README.md" -Destination "$destination/README.md"
+    Copy-Item -LiteralPath "$repositoryRoot/LICENSE" -Destination "$destination/licenses/RobotoMono-Apache-2.0.txt"
+}
+
+$knulliPorts = Join-Path $stagingRoot 'knulli/roms/ports'
+$knulliApp = Join-Path $knulliPorts 'CoverPlayer-Test'
+New-Item -ItemType Directory -Force -Path $knulliPorts | Out-Null
+Copy-AppPayload $knulliApp
+Copy-Item -LiteralPath "$repositoryRoot/packaging/knulli/CoverPlayer-Test.sh" -Destination "$knulliPorts/CoverPlayer-Test.sh"
+
+$knulliProductionPorts = Join-Path $stagingRoot 'knulli-production/roms/ports'
+$knulliProductionApp = Join-Path $knulliProductionPorts 'CoverPlayer'
+New-Item -ItemType Directory -Force -Path $knulliProductionPorts | Out-Null
+Copy-AppPayload $knulliProductionApp
+Copy-Item -LiteralPath "$repositoryRoot/packaging/knulli/CoverPlayer.sh" -Destination "$knulliProductionPorts/CoverPlayer.sh"
+
+$muosApp = Join-Path $stagingRoot 'muos/CoverPlayer'
+Copy-AppPayload $muosApp
+Copy-Item -LiteralPath "$repositoryRoot/packaging/muos/mux_launch.sh" -Destination "$muosApp/mux_launch.sh"
+
+function Invoke-RuntimeCollection([string]$destination, [string]$licenseDestination, [string]$extraExcluded) {
+    $previousErrorActionPreference = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    docker run --rm --volume "${repositoryRoot}:/work" coverplayer-arm64-build `
+        sh /work/scripts/collect-arm64-runtime.sh /work/build/arm64-release/coverplayer $destination $licenseDestination $extraExcluded
+    $dockerRunExitCode = $LASTEXITCODE
+    $ErrorActionPreference = $previousErrorActionPreference
+    if ($dockerRunExitCode -ne 0) { throw 'ARM64 runtime collection failed.' }
+}
+
+# muOS gets the full, untested-elsewhere transitive closure exactly as
+# before - unlike Knulli, there is no hardware-matched system SDL2/ALSA
+# known to already be present there, so nothing is assumed about what it
+# can resolve on its own.
+Invoke-RuntimeCollection '/work/build/staging/runtime-muos' '/work/build/staging/muos/CoverPlayer/licenses' ''
+Copy-Item -Path "$stagingRoot/runtime-muos/*" -Destination "$muosApp/libs"
+
+# Knulli ships its own hardware-specific SDL2 build for its framebuffer
+# stack - the generic Debian SDL2 only knows DRM/X11/Wayland and fails on
+# these devices, so it (and ALSA, likewise device-specific there) must
+# always come from the system, never from this bundle. Excluding both from
+# the dependency walk itself - not just deleting the two files afterward -
+# also drops everything that exists solely to support them: PulseAudio,
+# X11, Wayland, D-Bus, Kerberos, NFS/RPC, tcp-wrappers, and their own
+# transitive dependents. coverplayer never links or shells out to any of
+# those directly (Bluetooth/volume control shells out to the `pactl`/
+# `bluetoothctl` binaries, not their libraries), so none of it is actually
+# missing on Knulli - it was only ever there because the desktop Debian
+# SDL2 build pulls it in.
+Invoke-RuntimeCollection '/work/build/staging/runtime-knulli' '/work/build/staging/knulli/roms/ports/CoverPlayer-Test/licenses' 'libSDL2-2.0.so.0 libasound.so.2'
+Copy-Item -Path "$stagingRoot/runtime-knulli/*" -Destination "$knulliApp/libs"
+Copy-Item -Path "$stagingRoot/runtime-knulli/*" -Destination "$knulliProductionApp/libs"
+Copy-Item -Path "$knulliApp/licenses/*" -Destination "$knulliProductionApp/licenses" -Recurse -Force
+Remove-Item -LiteralPath "$stagingRoot/runtime-muos","$stagingRoot/runtime-knulli" -Recurse -Force
+
+function Write-Manifest([string]$root) {
+    $manifest = Join-Path $root 'MANIFEST.sha256'
+    $lines = Get-ChildItem -LiteralPath $root -File -Recurse |
+        Where-Object FullName -ne $manifest |
+        Sort-Object FullName |
+        ForEach-Object {
+            $relative = $_.FullName.Substring($root.Length).TrimStart('\','/').Replace('\','/')
+            $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $_.FullName).Hash.ToLowerInvariant()
+            "$hash  $relative"
+        }
+    [IO.File]::WriteAllLines($manifest, $lines, [Text.UTF8Encoding]::new($false))
+}
+
+Write-Manifest $knulliApp
+Write-Manifest $knulliProductionApp
+Write-Manifest $muosApp
+# A second manifest at each archive root covers every file, including the
+# application's own manifest and Knulli's launcher beside the app directory.
+Write-Manifest (Join-Path $stagingRoot 'knulli')
+Write-Manifest (Join-Path $stagingRoot 'knulli-production')
+Write-Manifest (Join-Path $stagingRoot 'muos')
+
+# Unzipped copies alongside the archives, for deploying via WinSCP/SSH
+# without needing to unzip on the device first. Content is identical to
+# what each archive below contains - manifest included.
+Copy-Item -LiteralPath $stagingRoot/knulli -Destination "$releaseRoot/CoverPlayer-Knulli-Test" -Recurse
+Copy-Item -LiteralPath "$stagingRoot/knulli-production" -Destination "$releaseRoot/CoverPlayer-Knulli" -Recurse
+Copy-Item -LiteralPath $stagingRoot/muos -Destination "$releaseRoot/CoverPlayer-muOS" -Recurse
+
+$python = 'C:\msys64\ucrt64\bin\python.exe'
+if (!(Test-Path -LiteralPath $python)) { throw 'MSYS2 UCRT64 Python is missing.' }
+& $python "$PSScriptRoot/create-package.py" "$stagingRoot/knulli" "$releaseRoot/CoverPlayer-Knulli-Test.zip"
+if ($LASTEXITCODE -ne 0) { throw 'Knulli archive creation failed.' }
+& $python "$PSScriptRoot/create-package.py" "$stagingRoot/knulli-production" "$releaseRoot/CoverPlayer-Knulli.zip"
+if ($LASTEXITCODE -ne 0) { throw 'Production Knulli archive creation failed.' }
+& $python "$PSScriptRoot/create-package.py" "$stagingRoot/muos" "$releaseRoot/CoverPlayer.muxapp"
+if ($LASTEXITCODE -ne 0) { throw 'muOS archive creation failed.' }
+
+& $python "$PSScriptRoot/verify-package.py" "$releaseRoot/CoverPlayer-Knulli-Test.zip"
+if ($LASTEXITCODE -ne 0) { throw 'Knulli archive verification failed.' }
+& $python "$PSScriptRoot/verify-package.py" "$releaseRoot/CoverPlayer-Knulli.zip"
+if ($LASTEXITCODE -ne 0) { throw 'Production Knulli archive verification failed.' }
+& $python "$PSScriptRoot/verify-package.py" "$releaseRoot/CoverPlayer.muxapp"
+if ($LASTEXITCODE -ne 0) { throw 'muOS archive verification failed.' }
+
+Get-FileHash -Algorithm SHA256 "$releaseRoot/CoverPlayer-Knulli.zip","$releaseRoot/CoverPlayer-Knulli-Test.zip","$releaseRoot/CoverPlayer.muxapp"

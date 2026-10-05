@@ -1,0 +1,19 @@
+FROM debian:11-slim
+
+ARG DEBIAN_FRONTEND=noninteractive
+
+RUN dpkg --add-architecture arm64 \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        cmake \
+        g++-aarch64-linux-gnu \
+        ninja-build \
+        pkg-config \
+        libsdl2-dev:arm64 \
+        libsdl2-ttf-dev:arm64 \
+        libsdl2-image-dev:arm64 \
+        libmpg123-dev:arm64 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /work
