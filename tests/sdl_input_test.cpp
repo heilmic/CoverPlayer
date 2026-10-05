@@ -14,6 +14,14 @@ bool pushStartEvent(Uint32 type) {
     return SDL_PushEvent(&event) == 1;
 }
 
+bool pushButton(Uint8 button) {
+    SDL_Event event{};
+    event.type = SDL_CONTROLLERBUTTONDOWN;
+    event.cbutton.type = SDL_CONTROLLERBUTTONDOWN;
+    event.cbutton.button = button;
+    return SDL_PushEvent(&event) == 1;
+}
+
 } // namespace
 
 #ifdef _WIN32
@@ -39,6 +47,24 @@ int main() {
         const auto released = input.poll(coverplayer::platform::Screen::Player, false);
         if (!released.cycleSleepTimer || released.background) {
             std::cerr << "short START did not exclusively trigger the sleep timer\n";
+            return 1;
+        }
+    }
+
+    {
+        coverplayer::platform::SdlInput input;
+        if (!pushButton(SDL_CONTROLLER_BUTTON_BACK)) return 1;
+        static_cast<void>(input.poll(coverplayer::platform::Screen::Player, false));
+        if (!input.helpVisible() || !pushButton(SDL_CONTROLLER_BUTTON_Y)) return 1;
+        const auto switched = input.poll(coverplayer::platform::Screen::Player, false);
+        if (!switched.toggleLanguage || switched.cycleSleepTimer || switched.addBookmark || !input.helpVisible()) {
+            std::cerr << "language switch in help triggered a player action\n";
+            return 1;
+        }
+        if (!pushButton(SDL_CONTROLLER_BUTTON_B)) return 1;
+        static_cast<void>(input.poll(coverplayer::platform::Screen::Player, false));
+        if (input.helpVisible()) {
+            std::cerr << "B did not close help\n";
             return 1;
         }
     }

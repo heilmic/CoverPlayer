@@ -37,8 +37,8 @@ int SDL_main(int argc, char** argv) {
 #else
 int main(int argc, char** argv) {
 #endif
-    if (argc != 3) {
-        std::cerr << "usage: coverplayer_screenshot_tool <output-dir> <source-cover-dir>\n";
+    if (argc != 3 && argc != 4) {
+        std::cerr << "usage: coverplayer_screenshot_tool <output-dir> <source-cover-dir> [de|en]\n";
         return 2;
     }
     const std::filesystem::path output = std::filesystem::u8path(argv[1]);
@@ -49,6 +49,7 @@ int main(int argc, char** argv) {
 
     SDL_SetHint(SDL_HINT_RENDER_DRIVER, "software");
     coverplayer::platform::SdlRenderer renderer;
+    if (argc == 4) renderer.setLanguage(coverplayer::languageFromCode(argv[3]));
     renderer.setBluetoothStatus(true, true);
     renderer.setPlayerDetails(64, 2, {}, 78);
 
@@ -184,5 +185,8 @@ int main(int argc, char** argv) {
     music.itemImages = musicCovers;
     music.selected = 2;
     if (!render(renderer, music, (output / "10-music-coverflow.bmp").u8string())) return 1;
+    renderer.setHelpVisible(true);
+    if (!render(renderer, player, (output / "11-help-player.bmp").u8string())) return 1;
+    if (!render(renderer, collections, (output / "12-help-collections.bmp").u8string())) return 1;
     return 0;
 }

@@ -28,6 +28,7 @@ public:
     void setView(ViewModel view) override;
     void setSleepTimer(int minutes) override;
     void setPlayerDetails(int volumePercent, std::size_t bookmarkCount, std::string notice, std::optional<int> batteryPercent) override;
+    void setLanguage(Language language) override;
     [[nodiscard]] std::optional<int> systemVolumePercent() const override;
     std::optional<int> adjustSystemVolume(int deltaPercent) override;
     [[nodiscard]] std::optional<int> batteryPercent() const override;

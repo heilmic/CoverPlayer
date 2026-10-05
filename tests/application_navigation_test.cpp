@@ -21,6 +21,7 @@ public:
     std::string changedBluetoothAddress;
     bool bluetoothConnectionSucceeds = true;
     bool backgroundSupported = false;
+    coverplayer::Language activeLanguage = coverplayer::Language::German;
     int enterBackgroundCalls = 0;
     std::vector<std::string> lastBackgroundTrackPaths;
     std::size_t lastBackgroundStartIndex = 0;
@@ -33,6 +34,7 @@ public:
     void setView(coverplayer::platform::ViewModel view) override { views.push_back(std::move(view)); }
     void setSleepTimer(int) override {}
     void setPlayerDetails(int, std::size_t, std::string, std::optional<int>) override {}
+    void setLanguage(coverplayer::Language language) override { activeLanguage = language; }
     std::optional<int> systemVolumePercent() const override { return std::nullopt; }
     std::optional<int> adjustSystemVolume(int) override { return std::nullopt; }
     coverplayer::platform::BluetoothState bluetoothState() override { return bluetooth; }
@@ -67,6 +69,7 @@ private:
 
 class FakeProgress : public coverplayer::persistence::ProgressStore {
 public:
+    std::string savedLanguage = "de";
     std::vector<coverplayer::persistence::MediaCollection> configured{{"Crime", "library/Crime"}};
     std::optional<coverplayer::persistence::TrackProgress> load(const std::string& path) override {
         if (path == "two-2.mp3") return coverplayer::persistence::TrackProgress{42.0, false};
@@ -80,6 +83,8 @@ public:
     bool saveCollections(const std::vector<coverplayer::persistence::MediaCollection>& collections) override { configured = collections; return true; }
     std::vector<double> bookmarks(const std::string&) override { return {}; }
     bool addBookmark(const std::string&, double) override { return true; }
+    std::string language() override { return savedLanguage; }
+    bool saveLanguage(const std::string& code) override { savedLanguage = code; return true; }
 };
 
 class FakeCache final : public coverplayer::library::LibraryCache {
@@ -444,6 +449,28 @@ int main() {
     pausedBackgroundApp.run();
     if (pausedBackgroundPlatform.enterBackgroundCalls != 0 || pausedBackgroundPlatform.cursor != 7) {
         std::cerr << "backgrounding a paused track resumed playback via the background helper\n";
+        return 1;
+    }
+
+    coverplayer::platform::InputActions switchLanguage; switchLanguage.toggleLanguage = true;
+    FakePlatform languagePlatform; languagePlatform.script = {switchLanguage, rootBack, quit};
+    FakeAudio languageAudio; FakeProgress languageProgress; FakeCache languageCache; FakeFileSystem languageFileSystem;
+    coverplayer::app::Application languageApp(languagePlatform, &languageAudio, &languageProgress,
+        languageCache, languageFileSystem, "unused", "");
+    languageApp.run();
+    bool sawEnglishCollections = false;
+    for (const auto& view : languagePlatform.views)
+        if (view.screen == coverplayer::platform::Screen::Collections && view.title == "COLLECTIONS") sawEnglishCollections = true;
+    if (languageProgress.savedLanguage != "en" || languagePlatform.activeLanguage != coverplayer::Language::English || !sawEnglishCollections) {
+        std::cerr << "switching to English did not update and save the UI language\n";
+        return 1;
+    }
+    FakePlatform restartedPlatform; restartedPlatform.script = {rootBack, quit};
+    coverplayer::app::Application restartedApp(restartedPlatform, &languageAudio, &languageProgress,
+        languageCache, languageFileSystem, "unused", "");
+    restartedApp.run();
+    if (restartedPlatform.activeLanguage != coverplayer::Language::English) {
+        std::cerr << "saved English language was not restored on restart\n";
         return 1;
     }
     return 0;

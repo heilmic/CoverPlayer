@@ -55,6 +55,8 @@ void SdlPlatform::setPlayerDetails(int volumePercent, std::size_t bookmarkCount,
     renderer_.setPlayerDetails(volumePercent, bookmarkCount, std::move(notice), batteryPercent);
 }
 
+void SdlPlatform::setLanguage(Language language) { renderer_.setLanguage(language); }
+
 std::optional<int> SdlPlatform::systemVolumePercent() const {
     return audio_.systemVolumePercent();
 }

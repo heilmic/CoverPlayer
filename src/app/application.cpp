@@ -28,7 +28,7 @@ const std::string& keyboardCharacters() {
     return characters;
 }
 const std::vector<std::pair<std::string,std::string>>& collectionTypes(){static const std::vector<std::pair<std::string,std::string>> values={{"audiobook","HOERBUCH"},{"radioplay","HOERSPIEL"},{"music","MUSIK"},{"podcast","PODCAST"},{"general","ALLGEMEIN"}};return values;}
-std::string typeLabel(const std::string& type){for(const auto& value:collectionTypes())if(value.first==type)return value.second;return "ALLGEMEIN";}
+std::string typeLabel(const std::string& type, Language language){for(const auto& value:collectionTypes())if(value.first==type)return tr(language,value.second.c_str());return tr(language,"ALLGEMEIN");}
 bool isCoverName(std::string name) {
     std::transform(name.begin(), name.end(), name.begin(), [](unsigned char value) {
         return static_cast<char>(std::tolower(value));
@@ -101,13 +101,13 @@ MediaProgress computeProgress(const std::vector<library::Collection>& nodes, per
 // elapsed time for audiobook/radioplay; falls back to the old completed-
 // file counter only if durations are not (yet) known, e.g. a library
 // cached before this feature existed and not yet rescanned.
-std::string progressLabel(const std::string& collectionType, const MediaProgress& progress) {
+std::string progressLabel(const std::string& collectionType, const MediaProgress& progress, Language language) {
     if (!isTimeTrackedType(collectionType)) return {};
     if (progress.totalSeconds <= 0.0) {
-        return std::to_string(progress.completedTracks) + "/" + std::to_string(progress.totalTracks) + " FERTIG";
+        return std::to_string(progress.completedTracks) + "/" + std::to_string(progress.totalTracks) + " " + tr(language,"FERTIG");
     }
     const auto percent = static_cast<int>(std::lround(100.0 * std::min(1.0, progress.playedSeconds / progress.totalSeconds)));
-    return std::to_string(percent) + "% GEHOERT";
+    return std::to_string(percent) + "% " + tr(language,"GEHOERT");
 }
 }
 
@@ -124,10 +124,12 @@ Application::Application(platform::Platform& platform, audio::AudioPlayer* audio
 
 int Application::run() {
     if (progressStore_ != nullptr) {
+        language_ = languageFromCode(progressStore_->language());
         const auto savedRoot = progressStore_->mediaRoot();
         if (!savedRoot.empty()) mediaRoot_ = savedRoot;
         collections_ = progressStore_->collections();
     }
+    platform_.setLanguage(language_);
     if(browseRoot_.empty())browseRoot_=fileSystem_.normalizedPath(fileSystem_.parent(mediaRoot_));
     if (collections_.empty()) collections_.push_back({folderName(mediaRoot_), mediaRoot_, "audiobook"});
     scanLibrary();
@@ -138,6 +140,14 @@ int Application::run() {
     bool quitRequested = false;
     while (!quitRequested) {
         const auto actions = platform_.pollEvents();
+        if (actions.toggleLanguage) {
+            language_ = language_ == Language::German ? Language::English : Language::German;
+            if (progressStore_ != nullptr) progressStore_->saveLanguage(languageCode(language_));
+            platform_.setLanguage(language_);
+            playerNotice_.clear();
+            editor_.message.clear();
+            bluetooth_.message.clear();
+        }
         quitRequested = actions.quit;
         if (!quitRequested && actions.background) { handleBackgroundRequest(); quitRequested = true; }
 
@@ -220,8 +230,8 @@ void Application::handleBrowserViewToggle(const platform::InputActions& actions)
 }
 
 void Application::handleBluetoothScreenShortcuts(const platform::InputActions& actions) {
-    if(actions.refreshBluetooth&&screen_==platform::Screen::Bluetooth)refreshBluetooth("Bluetooth-Status aktualisiert");
-    if(actions.toggleBluetooth&&screen_==platform::Screen::Bluetooth){const bool enable=!bluetooth_.state.powered;const bool success=platform_.setBluetoothEnabled(enable);refreshBluetooth(success?(enable?"Bluetooth eingeschaltet":"Bluetooth ausgeschaltet"):"Bluetooth konnte nicht geschaltet werden");}
+    if(actions.refreshBluetooth&&screen_==platform::Screen::Bluetooth)refreshBluetooth(t("Bluetooth-Status aktualisiert"));
+    if(actions.toggleBluetooth&&screen_==platform::Screen::Bluetooth){const bool enable=!bluetooth_.state.powered;const bool success=platform_.setBluetoothEnabled(enable);refreshBluetooth(t(success?(enable?"Bluetooth eingeschaltet":"Bluetooth ausgeschaltet"):"Bluetooth konnte nicht geschaltet werden"));}
 }
 
 void Application::handleTransportShortcuts(const platform::InputActions& actions) {
@@ -234,7 +244,7 @@ void Application::handleTransportShortcuts(const platform::InputActions& actions
     }
     if (actions.addBookmark && audioPlayer_ != nullptr && audioPlayer_->isOpen() && progressStore_ != nullptr) {
         progressStore_->addBookmark(currentMediaId_, audioPlayer_->positionSeconds());
-        playerNotice_ = "LESEZEICHEN GESPEICHERT";
+        playerNotice_ = t("LESEZEICHEN GESPEICHERT");
     }
     if (actions.jumpBookmark && audioPlayer_ != nullptr && audioPlayer_->isOpen() && progressStore_ != nullptr) {
         const auto marks = progressStore_->bookmarks(currentMediaId_);
@@ -243,7 +253,7 @@ void Application::handleTransportShortcuts(const platform::InputActions& actions
             for (double mark : marks) if (mark > audioPlayer_->positionSeconds() + 1.0) { target = mark; break; }
             audioPlayer_->seekSeconds(target - audioPlayer_->positionSeconds());
             const int seconds = static_cast<int>(target);
-            playerNotice_ = "LESEZEICHEN " + std::to_string(seconds / 60) + ":" +
+            playerNotice_ = std::string(t("LESEZEICHEN")) + " " + std::to_string(seconds / 60) + ":" +
                 (seconds % 60 < 10 ? "0" : "") + std::to_string(seconds % 60);
         }
     }
@@ -265,7 +275,7 @@ void Application::handlePlayerAndResumeShortcuts(const platform::InputActions& a
 
 void Application::handleRescanRequest(const platform::InputActions& actions) {
     if (actions.rescan && screen_ == platform::Screen::Folders) {
-        if(!fileSystem_.directoryExists(folderBrowser_.path)||!fileSystem_.isPathWithin(browseRoot_,folderBrowser_.path))editor_.message="Ordner ist nicht erreichbar";
+        if(!fileSystem_.directoryExists(folderBrowser_.path)||!fileSystem_.isPathWithin(browseRoot_,folderBrowser_.path))editor_.message=t("Ordner ist nicht erreichbar");
         else {editor_.pendingPath=folderBrowser_.path;editor_.message.clear();
             if(editor_.editingPath&&editor_.editedIndex<collections_.size()){editor_.pendingName=collections_[editor_.editedIndex].name;editor_.pendingType=collections_[editor_.editedIndex].type;keyboardIndex_=0;screen_=platform::Screen::CollectionName;}
             else{collectionTypeIndex_=0;screen_=platform::Screen::CollectionType;}}
@@ -346,7 +356,7 @@ void Application::handleBluetoothAcceptOrBack(const platform::InputActions& acti
             if(resumePlayback)audioPlayer_->togglePause();
             const bool success=platform_.setBluetoothDeviceConnected(device.address,connect);
             if(success&&resumePlayback)audioPlayer_->togglePause();
-            refreshBluetooth(success?(connect?"Verbunden - Lautstaerke synchronisiert":"Getrennt - Lautstaerke synchronisiert"):"Audio bleibt pausiert: Lautstaerke nicht sicher synchronisiert");
+            refreshBluetooth(t(success?(connect?"Verbunden - Lautstaerke synchronisiert":"Getrennt - Lautstaerke synchronisiert"):"Audio bleibt pausiert: Lautstaerke nicht sicher synchronisiert"));
         }
     } else if (actions.back) screen_ = bluetooth_.returnScreen;
 }
@@ -435,10 +445,10 @@ void Application::scanLibrary() {
     for (const auto& collection : collections_) {
         const bool available=fileSystem_.directoryExists(collection.path);
         if(!available){sources_.push_back({collection.name,collection.path,{},collection.type,false,{}});continue;}
-        platform::ViewModel progressView;progressView.screen=platform::Screen::Collections;progressView.title="BIBLIOTHEK WIRD EINGELESEN";progressView.message=collection.name;progressView.immediate=true;platform_.setView(progressView);
+        platform::ViewModel progressView;progressView.screen=platform::Screen::Collections;progressView.title=t("BIBLIOTHEK WIRD EINGELESEN");progressView.message=collection.name;progressView.immediate=true;platform_.setView(progressView);
         const auto fingerprint=fileSystem_.fingerprint(collection.path);
         auto cached = libraryCache_.load(collection.path,fingerprint);
-        auto albums = cached ? *cached : library::LibraryScanner(fileSystem_).scan(collection.path,[&](std::size_t visited,const std::string& current){if(visited==1||visited%16==0){progressView.message=collection.name+"  "+std::to_string(visited)+" ORDNER  "+folderName(current);platform_.setView(progressView);}});
+        auto albums = cached ? *cached : library::LibraryScanner(fileSystem_).scan(collection.path,[&](std::size_t visited,const std::string& current){if(visited==1||visited%16==0){progressView.message=collection.name+"  "+std::to_string(visited)+" "+t("ORDNER")+"  "+folderName(current);platform_.setView(progressView);}});
         if (!cached) libraryCache_.save(collection.path,fingerprint,albums);
         const auto coverPath = findCollectionCover(collection.path, albums);
         sources_.push_back({collection.name, collection.path, coverPath,collection.type,true,std::move(albums)});
@@ -487,7 +497,7 @@ const library::Collection* Application::selectedAlbum() const {
 }
 std::vector<library::Collection>* Application::currentNodes(){if(sources_.empty()||sourceIndex_>=sources_.size())return nullptr;auto* nodes=&sources_[sourceIndex_].albums;for(const auto index:navigationPath_){if(index>=nodes->size())return nullptr;nodes=&(*nodes)[index].children;}return nodes;}
 const std::vector<library::Collection>* Application::currentNodes()const{if(sources_.empty()||sourceIndex_>=sources_.size())return nullptr;const auto* nodes=&sources_[sourceIndex_].albums;for(const auto index:navigationPath_){if(index>=nodes->size())return nullptr;nodes=&(*nodes)[index].children;}return nodes;}
-std::string Application::currentContainerName()const{if(sources_.empty()||sourceIndex_>=sources_.size())return "SAMMLUNG";const auto* nodes=&sources_[sourceIndex_].albums;const library::Collection* container=nullptr;for(const auto index:navigationPath_){if(index>=nodes->size())break;container=&(*nodes)[index];nodes=&container->children;}return container==nullptr?sources_[sourceIndex_].name:container->name;}
+std::string Application::currentContainerName()const{if(sources_.empty()||sourceIndex_>=sources_.size())return t("SAMMLUNG");const auto* nodes=&sources_[sourceIndex_].albums;const library::Collection* container=nullptr;for(const auto index:navigationPath_){if(index>=nodes->size())break;container=&(*nodes)[index];nodes=&container->children;}return container==nullptr?sources_[sourceIndex_].name:container->name;}
 void Application::openSelectedNode(){auto* node=selectedAlbum();if(node==nullptr)return;if(!node->children.empty()){navigationPath_.push_back(albumIndex_);albumIndex_=0;trackIndex_=0;return;}if(node->tracks.empty())return;selectResumeTrack();screen_=platform::Screen::Tracks;}
 void Application::openSelectedTrack() {
     auto* album = selectedAlbum();
@@ -521,15 +531,15 @@ void Application::moveSelection(int delta) {
 
 void Application::publishCollections() {
     platform::ViewModel view; view.screen = screen_;
-    view.title = "SAMMLUNGEN"; view.selected = sourceIndex_;
+    view.title = t("SAMMLUNGEN"); view.selected = sourceIndex_;
     for (const auto& source : sources_) {
         const auto progress = computeProgress(source.albums, progressStore_);
-        const auto label = progressLabel(source.type, progress);
-        view.items.push_back((source.available?"":"[FEHLT]  ")+source.name+"|"+typeLabel(source.type)+"  "+std::to_string(source.albums.size())+" MEDIEN"+(label.empty()?"":"  "+label));
+        const auto label = progressLabel(source.type, progress, language_);
+        view.items.push_back((source.available?std::string{}:std::string(t("[FEHLT]"))+"  ")+source.name+"|"+typeLabel(source.type,language_)+"  "+std::to_string(source.albums.size())+" "+t("MEDIEN")+(label.empty()?"":"  "+label));
         view.itemImages.push_back(source.coverPath);
     }
     if (!sources_.empty()) view.coverPath = sources_[sourceIndex_].coverPath;
-    if (view.items.empty()) view.message = "Noch keine Sammlung konfiguriert";
+    if (view.items.empty()) view.message = t("Noch keine Sammlung konfiguriert");
     platform_.setView(std::move(view));
 }
 
@@ -540,13 +550,14 @@ void Application::publishBrowser() {
     const auto collectionType = sourceIndex_ < sources_.size() ? sources_[sourceIndex_].type : std::string{};
     if (nodes!=nullptr) for (const auto& node : *nodes) {
         const auto progress=computeProgress(node,progressStore_);
-        const auto kind=node.children.empty()?std::to_string(progress.totalTracks)+" TITEL":std::to_string(node.children.size())+" EINTRAEGE / "+std::to_string(progress.totalTracks)+" TITEL";
-        const auto label=progressLabel(collectionType,progress);
+        const auto trackWord=language_==Language::English&&progress.totalTracks==1?"TRACK":t("TITEL");
+        const auto kind=node.children.empty()?std::to_string(progress.totalTracks)+" "+trackWord:std::to_string(node.children.size())+" "+t("EINTRAEGE")+" / "+std::to_string(progress.totalTracks)+" "+trackWord;
+        const auto label=progressLabel(collectionType,progress,language_);
         view.items.push_back(node.name + "|" + kind + (label.empty()?"":"  "+label));
         view.itemImages.push_back(node.coverPath);
     }
     if(screen_==platform::Screen::AlbumList&&!view.itemImages.empty()&&view.selected<view.itemImages.size())view.coverPath=view.itemImages[view.selected];
-    if (view.items.empty()) view.message = "Keine Medien in dieser Sammlung";
+    if (view.items.empty()) view.message = t("Keine Medien in dieser Sammlung");
     platform_.setView(std::move(view));
 }
 
@@ -560,7 +571,7 @@ void Application::publishTracks() {
             if(!track.artist.empty())label+="  -  "+track.artist;
             const auto progress = progressStore_ != nullptr ? progressStore_->load(track.path) : std::nullopt;
             if (progress) {
-                if (progress->completed) label += "  [FERTIG]";
+                if (progress->completed) label += std::string("  ") + t("[FERTIG]");
                 else if (progress->positionSeconds > 0) { const int seconds = static_cast<int>(progress->positionSeconds); label += "  [" + std::to_string(seconds / 60) + ":" + (seconds % 60 < 10 ? "0" : "") + std::to_string(seconds % 60) + "]"; }
             }
             view.items.push_back(std::move(label));
@@ -574,9 +585,9 @@ void Application::publishPlayer() {
     const auto* album = selectedAlbum();
     if (album != nullptr && !album->tracks.empty()) {
         view.title = album->tracks[trackIndex_].name;
-        view.subtitle = album->name + (album->artist.empty()?"":"  -  "+album->artist) + "  |  TITEL " + std::to_string(trackIndex_ + 1) + "/" + std::to_string(album->tracks.size());
+        view.subtitle = album->name + (album->artist.empty()?"":"  -  "+album->artist) + "  |  " + (language_==Language::English?"TRACK":t("TITEL")) + " " + std::to_string(trackIndex_ + 1) + "/" + std::to_string(album->tracks.size());
         view.coverPath = album->coverPath;
-    } else view.title = currentTrackName_.empty() ? "WIEDERGABE" : currentTrackName_;
+    } else view.title = currentTrackName_.empty() ? t("WIEDERGABE") : currentTrackName_;
     view.message = lastError_;
     platform_.setView(std::move(view));
 }
@@ -600,9 +611,9 @@ void Application::scanFolders() {
     std::sort(first, folderBrowser_.entries.end(), [](const auto& left, const auto& right) { return left.name < right.name; });
 }
 void Application::publishFolders() {
-    platform::ViewModel view; view.screen = platform::Screen::Folders; view.title = "SAMMLUNGSORDNER";
+    platform::ViewModel view; view.screen = platform::Screen::Folders; view.title = t("SAMMLUNGSORDNER");
     view.message = editor_.message.empty()?folderBrowser_.path:editor_.message; view.selected = folderBrowser_.index;
-    for (const auto& folder : folderBrowser_.entries) view.items.push_back(folder.name == ".." ? "[..]" : "[ORDNER]  " + folder.name);
+    for (const auto& folder : folderBrowser_.entries) view.items.push_back(folder.name == ".." ? "[..]" : std::string(t("[ORDNER]")) + "  " + folder.name);
     platform_.setView(std::move(view));
 }
 
@@ -633,7 +644,7 @@ void Application::savePendingCollection() {
     editor_.pendingName = trimmed(editor_.pendingName);
     editor_.pendingPath = fileSystem_.normalizedPath(editor_.pendingPath);
     if (editor_.pendingName.empty()) {
-        editor_.message = "Bitte einen Namen eingeben";
+        editor_.message = t("Bitte einen Namen eingeben");
         return;
     }
     std::size_t savedIndex = editor_.editedIndex;
@@ -641,20 +652,20 @@ void Application::savePendingCollection() {
     std::string previousPath;
     if (editor_.editedIndex < collections_.size()) {
         const auto duplicate=std::find_if(collections_.begin(),collections_.end(),[&](const auto& collection){return fileSystem_.normalizedPath(collection.path)==editor_.pendingPath;});
-        if(duplicate!=collections_.end()&&static_cast<std::size_t>(std::distance(collections_.begin(),duplicate))!=editor_.editedIndex){editor_.message="Ordner wird bereits verwendet";return;}
+        if(duplicate!=collections_.end()&&static_cast<std::size_t>(std::distance(collections_.begin(),duplicate))!=editor_.editedIndex){editor_.message=t("Ordner wird bereits verwendet");return;}
         previousPath = collections_[editor_.editedIndex].path;
         updatedCollections[editor_.editedIndex] = {editor_.pendingName, editor_.pendingPath,editor_.pendingType};
     } else {
         const auto duplicate = std::find_if(collections_.begin(), collections_.end(), [&](const auto& collection) {
             return fileSystem_.normalizedPath(collection.path) == editor_.pendingPath;
         });
-        if (duplicate != collections_.end()) {editor_.message="Ordner wird bereits verwendet";return;} else {
+        if (duplicate != collections_.end()) {editor_.message=t("Ordner wird bereits verwendet");return;} else {
             updatedCollections.push_back({editor_.pendingName, editor_.pendingPath,editor_.pendingType});
             savedIndex = updatedCollections.size() - 1;
         }
     }
     if (progressStore_ != nullptr && !progressStore_->saveCollections(updatedCollections)) {
-        editor_.message = "Sammlung konnte nicht gespeichert werden";
+        editor_.message = t("Sammlung konnte nicht gespeichert werden");
         return;
     }
     collections_ = std::move(updatedCollections);
@@ -669,12 +680,12 @@ void Application::savePendingCollection() {
 void Application::publishCollectionManager() {
     platform::ViewModel view;
     view.screen = platform::Screen::CollectionManager;
-    view.title = "SAMMLUNGEN VERWALTEN";
+    view.title = t("SAMMLUNGEN VERWALTEN");
     view.selected = collectionManagerIndex_;
-    view.items.push_back("[+]  NEUE SAMMLUNG");
+    view.items.push_back(t("[+]  NEUE SAMMLUNG"));
     view.itemImages.push_back({});
     for (const auto& source : sources_) {
-        view.items.push_back((source.available?"":"[FEHLT]  ")+source.name+"|"+typeLabel(source.type));
+        view.items.push_back((source.available?std::string{}:std::string(t("[FEHLT]"))+"  ")+source.name+"|"+typeLabel(source.type,language_));
         view.itemImages.push_back(source.coverPath);
     }
     if (!editor_.message.empty()) {
@@ -683,7 +694,7 @@ void Application::publishCollectionManager() {
         view.coverPath = sources_[collectionManagerIndex_ - 1].coverPath;
         view.message = sources_[collectionManagerIndex_ - 1].path;
     } else {
-        view.message = "Ordner waehlen und Sammlung benennen";
+        view.message = t("Ordner waehlen und Sammlung benennen");
     }
     platform_.setView(std::move(view));
 }
@@ -691,24 +702,24 @@ void Application::publishCollectionManager() {
 void Application::publishCollectionName() {
     platform::ViewModel view;
     view.screen = platform::Screen::CollectionName;
-    view.title = "NAME DER SAMMLUNG";
+    view.title = t("NAME DER SAMMLUNG");
     view.subtitle = editor_.pendingName.empty() ? "_" : editor_.pendingName;
     view.message = editor_.message.empty() ? editor_.pendingPath : editor_.message;
     view.selected = keyboardIndex_;
     for (const char character : keyboardCharacters()) {
-        view.items.push_back(character == ' ' ? "SPACE" : std::string(1, character));
+        view.items.push_back(character == ' ' ? t("LEER") : std::string(1, character));
     }
     platform_.setView(std::move(view));
 }
 
-void Application::publishCollectionType(){platform::ViewModel view;view.screen=platform::Screen::CollectionType;view.title="SAMMLUNGSTYP";view.message=editor_.pendingPath;view.selected=collectionTypeIndex_;for(const auto&type:collectionTypes())view.items.push_back(type.second);platform_.setView(std::move(view));}
-void Application::publishCollectionDelete(){platform::ViewModel view;view.screen=platform::Screen::CollectionDelete;view.title="SAMMLUNG LOESCHEN?";if(collectionManagerIndex_>0&&collectionManagerIndex_-1<collections_.size()){const auto& collection=collections_[collectionManagerIndex_-1];view.subtitle=collection.name;view.message=collection.path;}view.items={"A  ENDGUELTIG LOESCHEN","B  ABBRECHEN"};platform_.setView(std::move(view));}
-void Application::deleteSelectedCollection(){if(collectionManagerIndex_==0||collections_.size()<=1){editor_.message="Mindestens eine Sammlung bleibt erhalten";screen_=platform::Screen::CollectionManager;return;}const auto index=collectionManagerIndex_-1;if(index>=collections_.size())return;auto updatedCollections=collections_;const auto removedPath=updatedCollections[index].path;updatedCollections.erase(updatedCollections.begin()+static_cast<std::ptrdiff_t>(index));if(progressStore_&&!progressStore_->saveCollections(updatedCollections)){editor_.message="Sammlung konnte nicht geloescht werden";screen_=platform::Screen::CollectionManager;return;}editor_.message.clear();collections_=std::move(updatedCollections);libraryCache_.invalidate(removedPath);scanLibrary();collectionManagerIndex_=std::min(index+1,collections_.size());screen_=platform::Screen::CollectionManager;}
-void Application::reorderSelectedCollection(int direction){if(collectionManagerIndex_==0||collections_.size()<2)return;const auto index=collectionManagerIndex_-1;const auto target=static_cast<long long>(index)+direction;if(target<0||target>=static_cast<long long>(collections_.size()))return;auto updatedCollections=collections_;std::swap(updatedCollections[index],updatedCollections[static_cast<std::size_t>(target)]);if(progressStore_&&!progressStore_->saveCollections(updatedCollections)){editor_.message="Reihenfolge konnte nicht gespeichert werden";return;}editor_.message.clear();collections_=std::move(updatedCollections);scanLibrary();collectionManagerIndex_=static_cast<std::size_t>(target)+1;}
+void Application::publishCollectionType(){platform::ViewModel view;view.screen=platform::Screen::CollectionType;view.title=t("SAMMLUNGSTYP");view.message=editor_.pendingPath;view.selected=collectionTypeIndex_;for(const auto&type:collectionTypes())view.items.push_back(t(type.second.c_str()));platform_.setView(std::move(view));}
+void Application::publishCollectionDelete(){platform::ViewModel view;view.screen=platform::Screen::CollectionDelete;view.title=t("SAMMLUNG LOESCHEN?");if(collectionManagerIndex_>0&&collectionManagerIndex_-1<collections_.size()){const auto& collection=collections_[collectionManagerIndex_-1];view.subtitle=collection.name;view.message=collection.path;}view.items={t("A  ENDGUELTIG LOESCHEN"),t("B  ABBRECHEN")};platform_.setView(std::move(view));}
+void Application::deleteSelectedCollection(){if(collectionManagerIndex_==0||collections_.size()<=1){editor_.message=t("Mindestens eine Sammlung bleibt erhalten");screen_=platform::Screen::CollectionManager;return;}const auto index=collectionManagerIndex_-1;if(index>=collections_.size())return;auto updatedCollections=collections_;const auto removedPath=updatedCollections[index].path;updatedCollections.erase(updatedCollections.begin()+static_cast<std::ptrdiff_t>(index));if(progressStore_&&!progressStore_->saveCollections(updatedCollections)){editor_.message=t("Sammlung konnte nicht geloescht werden");screen_=platform::Screen::CollectionManager;return;}editor_.message.clear();collections_=std::move(updatedCollections);libraryCache_.invalidate(removedPath);scanLibrary();collectionManagerIndex_=std::min(index+1,collections_.size());screen_=platform::Screen::CollectionManager;}
+void Application::reorderSelectedCollection(int direction){if(collectionManagerIndex_==0||collections_.size()<2)return;const auto index=collectionManagerIndex_-1;const auto target=static_cast<long long>(index)+direction;if(target<0||target>=static_cast<long long>(collections_.size()))return;auto updatedCollections=collections_;std::swap(updatedCollections[index],updatedCollections[static_cast<std::size_t>(target)]);if(progressStore_&&!progressStore_->saveCollections(updatedCollections)){editor_.message=t("Reihenfolge konnte nicht gespeichert werden");return;}editor_.message.clear();collections_=std::move(updatedCollections);scanLibrary();collectionManagerIndex_=static_cast<std::size_t>(target)+1;}
 
 void Application::openBluetooth(){bluetooth_.returnScreen=screen_;screen_=platform::Screen::Bluetooth;bluetooth_.index=0;refreshBluetooth();}
-void Application::refreshBluetooth(const std::string& message){platform::ViewModel loading;loading.screen=platform::Screen::Bluetooth;loading.title="BLUETOOTH";loading.message="Bluetooth wird gelesen ...";loading.immediate=true;platform_.setView(std::move(loading));bluetooth_.state=platform_.bluetoothState();if(bluetooth_.index>=bluetooth_.state.devices.size())bluetooth_.index=bluetooth_.state.devices.empty()?0:bluetooth_.state.devices.size()-1;bluetooth_.message=message;if(bluetooth_.message.empty()&&bluetooth_.state.devices.empty())bluetooth_.message="Keine gekoppelten Kopfhoerer gefunden";}
-void Application::publishBluetooth(){platform::ViewModel view;view.screen=platform::Screen::Bluetooth;view.title="BLUETOOTH-KOPFHOERER";view.subtitle=std::string("BLUETOOTH ")+(bluetooth_.state.powered?"AN":"AUS")+"  |  AUDIO "+(bluetooth_.state.audioActive?"AKTIV":"NICHT AKTIV");view.selected=bluetooth_.index;for(const auto& device:bluetooth_.state.devices)view.items.push_back(device.name+(device.active?"  [AKTIV]":device.connected?"  [VERBUNDEN]":""));view.message=bluetooth_.message;platform_.setView(std::move(view));}
+void Application::refreshBluetooth(const std::string& message){platform::ViewModel loading;loading.screen=platform::Screen::Bluetooth;loading.title="BLUETOOTH";loading.message=t("Bluetooth wird gelesen ...");loading.immediate=true;platform_.setView(std::move(loading));bluetooth_.state=platform_.bluetoothState();if(bluetooth_.index>=bluetooth_.state.devices.size())bluetooth_.index=bluetooth_.state.devices.empty()?0:bluetooth_.state.devices.size()-1;bluetooth_.message=message;if(bluetooth_.message.empty()&&bluetooth_.state.devices.empty())bluetooth_.message=t("Keine gekoppelten Kopfhoerer gefunden");}
+void Application::publishBluetooth(){platform::ViewModel view;view.screen=platform::Screen::Bluetooth;view.title=t("BLUETOOTH-KOPFHOERER");view.subtitle=std::string("BLUETOOTH ")+t(bluetooth_.state.powered?"AN":"AUS")+"  |  AUDIO "+t(bluetooth_.state.audioActive?"AKTIV":"NICHT AKTIV");view.selected=bluetooth_.index;for(const auto& device:bluetooth_.state.devices)view.items.push_back(device.name+(device.active?std::string("  ")+t("[AKTIV]"):device.connected?std::string("  ")+t("[VERBUNDEN]"):""));view.message=bluetooth_.message;platform_.setView(std::move(view));}
 
 std::string Application::findCollectionCover(const std::string& path,
     const std::vector<library::Collection>& albums) const {
@@ -720,7 +731,9 @@ std::string Application::findCollectionCover(const std::string& path,
 }
 bool Application::openMedia(const std::string& path) {
     if (audioPlayer_ == nullptr || !audioPlayer_->open(path)) {
-        lastError_ = audioPlayer_ == nullptr ? "Audioausgabe nicht verfuegbar" : audioPlayer_->error();
+        lastError_ = audioPlayer_ == nullptr ? t("Audioausgabe nicht verfuegbar") : audioPlayer_->error();
+        if (language_ == Language::English && lastError_.rfind("Keine MP3-Datei (", 0) == 0)
+            lastError_ = "Not an MP3 file";
         std::cerr << "CoverPlayer audio error for '" << path << "': " << lastError_ << '\n'; return false;
     }
     lastError_.clear(); currentMediaId_ = path;

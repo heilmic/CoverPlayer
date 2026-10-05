@@ -29,6 +29,7 @@ public:
     void setPlayerDetails(int volumePercent, std::size_t bookmarkCount, std::string notice, std::optional<int> batteryPercent);
     void setHelpVisible(bool visible);
     void setBluetoothStatus(bool capable, bool audioActive);
+    void setLanguage(Language language);
 
     void present();
 
@@ -80,6 +81,7 @@ private:
     bool helpVisible_ = false;
     bool bluetoothCapable_ = false;
     bool bluetoothAudioActive_ = false;
+    Language language_ = Language::German;
 
     ViewModel view_;
     SDL_Texture* coverTexture_ = nullptr;

@@ -21,6 +21,8 @@ public:
     bool saveCollections(const std::vector<MediaCollection>& collections) override;
     [[nodiscard]] std::vector<double> bookmarks(const std::string& mediaId) override;
     bool addBookmark(const std::string& mediaId, double positionSeconds) override;
+    [[nodiscard]] std::string language() override;
+    bool saveLanguage(const std::string& code) override;
 
     [[nodiscard]] const std::string& error() const noexcept;
 
@@ -33,6 +35,7 @@ private:
     std::filesystem::path collectionsFile_;
     std::filesystem::path namedCollectionsFile_;
     std::filesystem::path bookmarksFile_;
+    std::filesystem::path languageFile_;
     std::map<std::string, TrackProgress> entries_;
     std::string lastMediaId_;
     std::string mediaRoot_;

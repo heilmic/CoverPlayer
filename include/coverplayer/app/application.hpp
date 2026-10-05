@@ -108,6 +108,7 @@ private:
     void publishBrowser();
     void publishTracks();
     void publishPlayer();
+    [[nodiscard]] const char* t(const char* text) const { return tr(language_, text); }
 
     platform::Platform& platform_;
     audio::AudioPlayer* audioPlayer_;
@@ -146,6 +147,7 @@ private:
     std::size_t keyboardIndex_ = 0;
     std::size_t collectionTypeIndex_ = 0;
     platform::Screen albumBrowserScreen_ = platform::Screen::CoverFlow;
+    Language language_ = Language::German;
 
     // Transient state for the collection-editor flow (folder pick -> type ->
     // name), valid only while one of the Collection* screens is active.

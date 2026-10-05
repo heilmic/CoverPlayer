@@ -36,8 +36,10 @@ resume from their saved position.
 
 The player shows your place in the current track. Playback progress and
 bookmarks are saved separately from your media, so reinstalling CoverPlayer
-does not require moving your collection folders. Press **Select** for the
-in-app help and the complete controls.
+does not require moving your collection folders. The bottom bar shows the
+main buttons on each screen and keeps **Select: Help** visible. The help page
+shows all buttons for the current screen. Press **Y** there to switch between
+German and English; the choice is saved for the next launch.
 
 ## Background playback and Bluetooth
 

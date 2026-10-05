@@ -60,6 +60,7 @@ InputActions SdlInput::poll(Screen currentScreen, bool bluetoothEnabled) {
             if (helpVisible_) {
                 if (event.key.keysym.sym == SDLK_ESCAPE || event.key.keysym.sym == SDLK_BACKSPACE) helpVisible_ = false;
                 else if (event.key.keysym.sym == SDLK_x && bluetoothEnabled && currentScreen != Screen::Bluetooth) { helpVisible_ = false; actions.openBluetooth = true; }
+                else if (event.key.keysym.sym == SDLK_y) actions.toggleLanguage = true;
                 continue;
             }
             if (currentScreen == Screen::CollectionName) {
@@ -114,6 +115,7 @@ InputActions SdlInput::poll(Screen currentScreen, bool bluetoothEnabled) {
             if (helpVisible_) {
                 if (button == SDL_CONTROLLER_BUTTON_BACK || button == SDL_CONTROLLER_BUTTON_B) helpVisible_ = false;
                 else if (button == SDL_CONTROLLER_BUTTON_X && bluetoothEnabled && currentScreen != Screen::Bluetooth) { helpVisible_ = false; actions.openBluetooth = true; }
+                else if (button == SDL_CONTROLLER_BUTTON_Y) actions.toggleLanguage = true;
                 continue;
             }
             if (button == SDL_CONTROLLER_BUTTON_START) {
@@ -198,9 +200,11 @@ InputActions SdlInput::poll(Screen currentScreen, bool bluetoothEnabled) {
     if (helpVisible_ && !actions.quit) {
         const bool suspend = actions.suspend;
         const bool resume = actions.resume;
+        const bool toggleLanguage = actions.toggleLanguage;
         actions = {};
         actions.suspend = suspend;
         actions.resume = resume;
+        actions.toggleLanguage = toggleLanguage;
     }
     return actions;
 }

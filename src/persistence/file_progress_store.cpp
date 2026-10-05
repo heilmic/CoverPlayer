@@ -21,6 +21,7 @@ FileProgressStore::FileProgressStore() {
     collectionsFile_ = stateDirectory_ / "collections-v1.txt";
     namedCollectionsFile_ = stateDirectory_ / "collections-v2.txt";
     bookmarksFile_ = stateDirectory_ / "bookmarks-v1.txt";
+    languageFile_ = stateDirectory_ / "language-v1.txt";
 }
 
 std::optional<TrackProgress> FileProgressStore::load(const std::string& mediaId) {
@@ -102,6 +103,32 @@ std::vector<double> FileProgressStore::bookmarks(const std::string& mediaId) {
 }
 bool FileProgressStore::addBookmark(const std::string& mediaId,double positionSeconds) {
     std::error_code error;std::filesystem::create_directories(stateDirectory_,error);std::ofstream output(bookmarksFile_,std::ios::app);output<<std::quoted(mediaId)<<' '<<std::setprecision(17)<<positionSeconds<<'\n';return static_cast<bool>(output);
+}
+
+std::string FileProgressStore::language() {
+    std::ifstream input(languageFile_);
+    std::string code;
+    return (input >> code && code == "en") ? "en" : "de";
+}
+
+bool FileProgressStore::saveLanguage(const std::string& code) {
+    if (code != "de" && code != "en") return false;
+    std::error_code error;
+    std::filesystem::create_directories(stateDirectory_, error);
+    if (error) return false;
+    const auto temporaryFile = languageFile_.string() + ".tmp";
+    {
+        std::ofstream output(temporaryFile, std::ios::trunc);
+        output << code << '\n';
+        if (!output) return false;
+    }
+    std::filesystem::rename(temporaryFile, languageFile_, error);
+    if (error) {
+        std::filesystem::remove(languageFile_, error);
+        error.clear();
+        std::filesystem::rename(temporaryFile, languageFile_, error);
+    }
+    return !error;
 }
 
 bool FileProgressStore::loadFile() {

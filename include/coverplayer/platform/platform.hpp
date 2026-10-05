@@ -1,6 +1,7 @@
 #pragma once
 
 #include "coverplayer/platform/capabilities.hpp"
+#include "coverplayer/localization.hpp"
 
 #include <string>
 #include <optional>
@@ -37,6 +38,7 @@ struct InputActions {
     bool refreshBluetooth = false;
     bool toggleLibraryView = false;
     bool background = false;
+    bool toggleLanguage = false;
 };
 
 struct BluetoothDevice {
@@ -77,6 +79,7 @@ public:
     virtual void setView(ViewModel view) = 0;
     virtual void setSleepTimer(int minutes) = 0;
     virtual void setPlayerDetails(int volumePercent, std::size_t bookmarkCount, std::string notice, std::optional<int> batteryPercent) = 0;
+    virtual void setLanguage(Language) {}
     [[nodiscard]] virtual std::optional<int> systemVolumePercent() const = 0;
     // Remaining charge as a 0-100 percentage, or nullopt when no battery is
     // present or reachable (desktop builds, or a handheld reporting through

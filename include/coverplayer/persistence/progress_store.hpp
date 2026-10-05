@@ -29,6 +29,8 @@ public:
     virtual bool saveCollections(const std::vector<MediaCollection>& collections) = 0;
     [[nodiscard]] virtual std::vector<double> bookmarks(const std::string& mediaId) = 0;
     virtual bool addBookmark(const std::string& mediaId, double positionSeconds) = 0;
+    [[nodiscard]] virtual std::string language() { return "de"; }
+    virtual bool saveLanguage(const std::string&) { return false; }
 };
 
 } // namespace coverplayer::persistence

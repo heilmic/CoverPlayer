@@ -146,6 +146,7 @@ void SdlRenderer::setPlayerDetails(int volumePercent, std::size_t bookmarkCount,
 }
 
 void SdlRenderer::setHelpVisible(bool visible) { helpVisible_ = visible; }
+void SdlRenderer::setLanguage(Language language) { language_ = language; }
 
 void SdlRenderer::setBluetoothStatus(bool capable, bool audioActive) {
     bluetoothCapable_ = capable;
@@ -229,7 +230,7 @@ void SdlRenderer::drawCover(int x, int y, int width, int height) {
 
 void SdlRenderer::drawCoverTexture(SDL_Texture* texture, int x, int y, int width, int height, Uint8 brightness, double angle) {
     SDL_SetRenderDrawColor(renderer_,10,13,20,255);const SDL_Rect frame{x-5,y-5,width+10,height+10};SDL_RenderFillRect(renderer_,&frame);
-    if(texture==nullptr){SDL_SetRenderDrawColor(renderer_,43,50,64,255);const SDL_Rect empty{x,y,width,height};SDL_RenderFillRect(renderer_,&empty);if(width>=180)drawText("NO COVER",x+width/2-50,y+height/2-10,SDL_Color{130,140,155,255});return;}
+    if(texture==nullptr){SDL_SetRenderDrawColor(renderer_,43,50,64,255);const SDL_Rect empty{x,y,width,height};SDL_RenderFillRect(renderer_,&empty);if(width>=180)drawText(tr(language_,"NO COVER"),x+width/2-50,y+height/2-10,SDL_Color{130,140,155,255});return;}
     int sourceWidth=0,sourceHeight=0;SDL_QueryTexture(texture,nullptr,nullptr,&sourceWidth,&sourceHeight);if(sourceWidth<=0||sourceHeight<=0)return;
     const float scale=std::min(static_cast<float>(width)/sourceWidth,static_cast<float>(height)/sourceHeight);const int w=static_cast<int>(sourceWidth*scale),h=static_cast<int>(sourceHeight*scale);const SDL_Rect destination{x+(width-w)/2,y+(height-h)/2,w,h};
     SDL_SetTextureColorMod(texture,brightness,brightness,brightness);SDL_RenderCopyEx(renderer_,texture,nullptr,&destination,angle,nullptr,SDL_FLIP_NONE);SDL_SetTextureColorMod(texture,255,255,255);
@@ -489,7 +490,7 @@ void SdlRenderer::renderHandheldUi() {
     else if (view_.screen == Screen::Folders) section = "ORDNER";
     else if (view_.screen == Screen::Bluetooth) section = "BLUETOOTH";
     if(view_.screen==Screen::Player){
-        drawText(section,252,22,SDL_Color{155,166,184,255});drawBluetoothIcon(400,20);
+        drawText(tr(language_,section),252,22,SDL_Color{155,166,184,255});drawBluetoothIcon(400,20);
         const std::string volume="VOL "+std::to_string(volumePercent_)+"%";drawText(volume.c_str(),430,22,SDL_Color{203,210,220,255});
         if(batteryPercent_){drawBatteryIcon(528,24,*batteryPercent_);const std::string battery=std::to_string(*batteryPercent_)+"%";drawText(battery.c_str(),558,22,SDL_Color{203,210,220,255});}
         if(sleepMinutes_>0){const std::string sleep=std::to_string(sleepMinutes_)+"m";drawText(sleep.c_str(),607,22,SDL_Color{242,190,92,255});}
@@ -498,7 +499,7 @@ void SdlRenderer::renderHandheldUi() {
         // The section label and the sleep badge each get a fixed slot so
         // neither hides the other - previously the sleep timer replaced the
         // screen name entirely, which lost the "where am I" context.
-        drawFittedText(section,458,22,12,SDL_Color{155,166,184,255});
+        drawFittedText(tr(language_,section),458,22,12,SDL_Color{155,166,184,255});
         if(sleepMinutes_>0){const std::string sleep=std::to_string(sleepMinutes_)+"m";drawText(sleep.c_str(),606,22,SDL_Color{242,190,92,255});}
     }
 
@@ -508,7 +509,7 @@ void SdlRenderer::renderHandheldUi() {
         drawCover(25,100,225,225);
         drawFittedText(view_.title,275,100,26,SDL_Color{244,247,251,255},titleFont_);
         drawFittedText(view_.subtitle,275,148,31,SDL_Color{143,154,170,255});
-        drawText(("LESEZEICHEN  "+std::to_string(bookmarkCount_)).c_str(),275,181,SDL_Color{143,154,170,255});
+        drawText((std::string(tr(language_,"LESEZEICHEN"))+"  "+std::to_string(bookmarkCount_)).c_str(),275,181,SDL_Color{143,154,170,255});
         if(!notice_.empty())drawFittedText(notice_,275,225,31,SDL_Color{242,190,92,255});
         if(!view_.message.empty())drawFittedText(view_.message,275,270,31,SDL_Color{242,118,109,255});
 
@@ -538,7 +539,7 @@ void SdlRenderer::renderHandheldUi() {
         drawSelectableList(view_.items,view_.selected,{24,592,31,184,7,57,false});
         if(!view_.message.empty())drawFittedText(view_.message,24,397,64,SDL_Color{242,190,92,255});
     } else if(view_.screen==Screen::CollectionName) {
-        drawText("NAME DER SAMMLUNG",24,94,SDL_Color{143,154,170,255});
+        drawText(tr(language_,"NAME DER SAMMLUNG"),24,94,SDL_Color{143,154,170,255});
         SDL_SetRenderDrawColor(renderer_,31,38,50,255);const SDL_Rect nameField{24,121,592,42};SDL_RenderFillRect(renderer_,&nameField);
         SDL_SetRenderDrawColor(renderer_,92,211,151,255);const SDL_Rect nameMarker{24,121,4,42};SDL_RenderFillRect(renderer_,&nameMarker);
         drawFittedText(view_.subtitle,40,131,52,SDL_Color{244,247,251,255});
@@ -558,33 +559,50 @@ void SdlRenderer::renderHandheldUi() {
         if(!view_.message.empty())drawFittedText(view_.message,25,345,65,SDL_Color{143,154,170,255});
     }
     SDL_SetRenderDrawColor(renderer_,19,23,32,255);const SDL_Rect footer{0,423,640,57};SDL_RenderFillRect(renderer_,&footer);
-    if(view_.screen==Screen::Player){drawFittedText("A PLAY/PAUSE  L1/R1 -/+30s  <-/-> -/+10s  ^/v TITEL",16,442,61,SDL_Color{171,181,196,255});}
-    else {const char* hints=view_.screen==Screen::Folders?"A OEFFNEN   Y DIESEN ORDNER   B ZURUECK":view_.screen==Screen::CollectionManager?"A BEARBEITEN  Y PFAD  X LOESCHEN  L1/R1 SORTIEREN":view_.screen==Screen::CollectionType?"A TYP WAEHLEN   B ZURUECK":view_.screen==Screen::CollectionName?"A ZEICHEN   X LOESCHEN   Y SPEICHERN   L1 LEEREN":view_.screen==Screen::CollectionDelete?"A LOESCHEN   B ABBRECHEN":view_.screen==Screen::Bluetooth?"A VERBINDEN/TRENNEN   X AN/AUS   Y AKTUALISIEREN   B ZURUECK":view_.screen==Screen::CoverFlow?"A OEFFNEN   Y LISTE   B ZURUECK   X SCANNEN":view_.screen==Screen::AlbumList?"A OEFFNEN   Y COVERFLOW   B ZURUECK   X SCANNEN":view_.screen==Screen::Tracks?"A ABSPIELEN/FORTSETZEN   B ZURUECK   SELECT HILFE":"A OEFFNEN   Y SAMMLUNGEN   X SCANNEN";drawFittedText(hints,20,442,67,SDL_Color{171,181,196,255});}
+    const char* primaryHint = "A OEFFNEN   Y VERWALTEN   X SCANNEN";
+    switch (view_.screen) {
+        case Screen::Player: primaryHint = "A PLAY/PAUSE   B ZURUECK"; break;
+        case Screen::Folders: primaryHint = "A OEFFNEN   Y ORDNER WAEHLEN"; break;
+        case Screen::CollectionManager: primaryHint = "A BEARBEITEN   Y PFAD   B ZURUECK"; break;
+        case Screen::CollectionType: primaryHint = "A TYP WAEHLEN   B ZURUECK"; break;
+        case Screen::CollectionName: primaryHint = "A ZEICHEN   Y SPEICHERN   B ABBRECHEN"; break;
+        case Screen::CollectionDelete: primaryHint = "A LOESCHEN   B ABBRECHEN"; break;
+        case Screen::Bluetooth: primaryHint = "A VERBINDEN   X AN/AUS   B ZURUECK"; break;
+        case Screen::CoverFlow: primaryHint = "A OEFFNEN   Y LISTE   B ZURUECK"; break;
+        case Screen::AlbumList: primaryHint = "A OEFFNEN   Y COVERFLOW   B ZURUECK"; break;
+        case Screen::Tracks: primaryHint = "A ABSPIELEN   B ZURUECK"; break;
+        default: break;
+    }
+    drawFittedText(tr(language_,primaryHint),18,view_.screen==Screen::Player?427:442,40,SDL_Color{171,181,196,255});
+    if (view_.screen==Screen::Player)
+        drawFittedText(tr(language_,"START KURZ SLEEP / LANG HINTERGRUND"),18,451,40,SDL_Color{171,181,196,255});
+    SDL_SetRenderDrawColor(renderer_,37,71,61,255);const SDL_Rect helpBadge{478,430,146,38};SDL_RenderFillRect(renderer_,&helpBadge);
+    drawText(tr(language_,"SELECT HILFE"),484,440,SDL_Color{232,247,239,255});
     if(helpVisible_){
         SDL_SetRenderDrawBlendMode(renderer_,SDL_BLENDMODE_NONE);SDL_SetRenderDrawColor(renderer_,7,9,14,255);const SDL_Rect panel{0,70,640,410};SDL_RenderFillRect(renderer_,&panel);
-        drawText("BEDIENUNG",54,92,SDL_Color{92,211,151,255});
-        if(view_.screen==Screen::Player){
-            drawText("A          Wiedergabe / Pause",54,133,SDL_Color{244,247,251,255});drawText("B          Zurueck",54,165,SDL_Color{244,247,251,255});drawText("LINKS/RECHTS 10 Sekunden spulen",54,197,SDL_Color{244,247,251,255});drawText("OBEN/UNTEN  Voriger / naechster Titel",54,229,SDL_Color{244,247,251,255});drawText("L1/R1      30 Sekunden spulen",54,261,SDL_Color{244,247,251,255});drawText("Y setzen   X naechstes Lesezeichen",54,293,SDL_Color{244,247,251,255});drawText("START kurz Sleep / halten Hintergrund",54,325,SDL_Color{244,247,251,255});
-        } else if(view_.screen==Screen::Collections){
-            drawText("A          Sammlung oeffnen",54,137,SDL_Color{244,247,251,255});drawText("STEUERKREUZ Sammlung auswaehlen",54,171,SDL_Color{244,247,251,255});drawText("Y          Sammlungsordner verwalten",54,205,SDL_Color{244,247,251,255});drawText("X          Bibliothek neu scannen",54,239,SDL_Color{244,247,251,255});drawText("B          Bleibt in der App",54,273,SDL_Color{244,247,251,255});
-        } else if(view_.screen==Screen::CollectionManager){
-            drawText("A          Typ und Namen bearbeiten",54,137,SDL_Color{244,247,251,255});drawText("Y          Pfad bearbeiten / Neu anlegen",54,171,SDL_Color{244,247,251,255});drawText("X          Sammlung loeschen",54,205,SDL_Color{244,247,251,255});drawText("L1/R1      Reihenfolge verschieben",54,239,SDL_Color{244,247,251,255});drawText("B          Zurueck zur Bibliothek",54,273,SDL_Color{244,247,251,255});
-        } else if(view_.screen==Screen::CollectionType){
-            drawText("A          Sammlungstyp waehlen",54,137,SDL_Color{244,247,251,255});drawText("STEUERKREUZ Typ auswaehlen",54,171,SDL_Color{244,247,251,255});drawText("B          Zurueck",54,205,SDL_Color{244,247,251,255});
-        } else if(view_.screen==Screen::CollectionDelete){
-            drawText("A          Sammlung entfernen",54,137,SDL_Color{242,118,109,255});drawText("B          Abbrechen",54,171,SDL_Color{244,247,251,255});drawText("Mediendateien werden niemals geloescht",54,220,SDL_Color{143,154,170,255});
-        } else if(view_.screen==Screen::CollectionName){
-            drawText("A          Zeichen anfuegen",54,137,SDL_Color{244,247,251,255});drawText("X          Letztes Zeichen loeschen",54,171,SDL_Color{244,247,251,255});drawText("L1         Namen vollstaendig leeren",54,205,SDL_Color{244,247,251,255});drawText("Y          Sammlung speichern",54,239,SDL_Color{244,247,251,255});drawText("B          Abbrechen",54,273,SDL_Color{244,247,251,255});
-        } else if(view_.screen==Screen::Bluetooth){
-            drawText("A          Verbinden / trennen",54,137,SDL_Color{244,247,251,255});drawText("X          Bluetooth an / aus",54,171,SDL_Color{244,247,251,255});drawText("Y          Status aktualisieren",54,205,SDL_Color{244,247,251,255});drawText("B          Zurueck",54,239,SDL_Color{244,247,251,255});drawText("Neue Geraete in Knulli koppeln",54,287,SDL_Color{143,154,170,255});
-        } else if(view_.screen==Screen::CoverFlow||view_.screen==Screen::AlbumList){
-            drawText("A          Ordner / Medium oeffnen",54,137,SDL_Color{244,247,251,255});drawText("B          Eine Ebene zurueck",54,171,SDL_Color{244,247,251,255});drawText("LINKS/RECHTS Eintrag auswaehlen",54,205,SDL_Color{244,247,251,255});drawText("Y          CoverFlow / Liste",54,239,SDL_Color{244,247,251,255});drawText("X          Sammlung neu scannen",54,273,SDL_Color{244,247,251,255});
-        } else if(view_.screen==Screen::Tracks){
-            drawText("A          Abspielen / Fortsetzen",54,137,SDL_Color{244,247,251,255});drawText("B          Zurueck zur Albumansicht",54,171,SDL_Color{244,247,251,255});drawText("STEUERKREUZ Titel auswaehlen",54,205,SDL_Color{244,247,251,255});drawText("Fortsetzbarer Titel ist vorausgewaehlt",54,239,SDL_Color{143,154,170,255});
-        } else {
-            drawText("A          Ordner oeffnen",54,137,SDL_Color{244,247,251,255});drawText("B          Zurueck",54,171,SDL_Color{244,247,251,255});drawText("Y          Diesen Ordner auswaehlen",54,205,SDL_Color{244,247,251,255});
+        drawText(tr(language_,"BEDIENUNG"),54,92,SDL_Color{92,211,151,255});
+        std::array<const char*,7> lines{};
+        switch (view_.screen) {
+            case Screen::Player: lines={"A  Wiedergabe / Pause","Links/Rechts  10 Sek. spulen","L1/R1  30 Sek. spulen","Oben/Unten  Titel wechseln","Y  Lesezeichen setzen; X  naechstes","START kurz  Sleep-Timer","START 2 Sek.  Hintergrundwiedergabe"}; break;
+            case Screen::Collections: lines={"A  Sammlung oeffnen","Steuerkreuz  Sammlung waehlen","Y  Sammlungen verwalten","X  Bibliothek scannen","B  Bleibt in der App"}; break;
+            case Screen::CollectionManager: lines={"A  Typ und Namen bearbeiten","Y  Pfad bearbeiten / neu anlegen","X  Sammlung loeschen","L1/R1  Reihenfolge verschieben","B  Zurueck zur Bibliothek"}; break;
+            case Screen::CollectionType: lines={"A  Sammlungstyp waehlen","Steuerkreuz  Typ auswaehlen","B  Zurueck"}; break;
+            case Screen::CollectionDelete: lines={"A  Sammlung entfernen","B  Abbrechen","Mediendateien werden nie geloescht"}; break;
+            case Screen::CollectionName: lines={"A  Zeichen anfuegen","X  Letztes Zeichen loeschen","L1  Namen komplett leeren","Y  Sammlung speichern","B  Abbrechen"}; break;
+            case Screen::Bluetooth: lines={"A  Verbinden / trennen","X  Bluetooth an / aus","Y  Status aktualisieren","B  Zurueck","Neue Geraete in Knulli koppeln"}; break;
+            case Screen::CoverFlow:
+            case Screen::AlbumList: lines={"A  Ordner / Medium oeffnen","B  Eine Ebene zurueck","Links/Rechts  Eintrag waehlen","Y  CoverFlow / Liste","X  Sammlung neu scannen"}; break;
+            case Screen::Tracks: lines={"A  Abspielen / Fortsetzen","B  Zurueck zur Albumansicht","Steuerkreuz  Titel auswaehlen","Fortsetzbarer Titel ist vorausgewaehlt"}; break;
+            case Screen::Folders: lines={"A  Ordner oeffnen","B  Zurueck","Y  Diesen Ordner auswaehlen"}; break;
         }
-        drawText("START 2 Sek. / START+SELECT  App beenden",54,365,SDL_Color{242,190,92,255});SDL_SetRenderDrawColor(renderer_,19,23,32,255);const SDL_Rect helpFooter{0,423,640,57};SDL_RenderFillRect(renderer_,&helpFooter);drawText(bluetoothCapable_&&view_.screen!=Screen::Bluetooth?"X BLUETOOTH    B / SELECT SCHLIESSEN":"B / SELECT  HILFE SCHLIESSEN",bluetoothCapable_&&view_.screen!=Screen::Bluetooth?112:166,442,SDL_Color{171,181,196,255});
+        for (std::size_t index=0;index<lines.size();++index) {
+            if (lines[index] != nullptr) drawFittedText(tr(language_,lines[index]),54,132+static_cast<int>(index)*31,47,SDL_Color{244,247,251,255});
+        }
+        drawFittedText(tr(language_,"START+SELECT  App beenden (Hilfe zu)"),54,365,47,SDL_Color{242,190,92,255});
+        SDL_SetRenderDrawColor(renderer_,19,23,32,255);const SDL_Rect helpFooter{0,423,640,57};SDL_RenderFillRect(renderer_,&helpFooter);
+        drawText(language_==Language::German?"Y ENGLISH":"Y DEUTSCH",18,442,SDL_Color{92,211,151,255});
+        if(bluetoothCapable_&&view_.screen!=Screen::Bluetooth)drawText("X BLUETOOTH",180,442,SDL_Color{171,181,196,255});
+        drawText(tr(language_,"B / SELECT SCHLIESSEN"),386,442,SDL_Color{171,181,196,255});
     }
     SDL_RenderPresent(renderer_);
 }

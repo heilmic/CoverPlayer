@@ -22,6 +22,8 @@ deleting those files or any media directory.
 - A opens the selected item or pauses/resumes playback.
 - B goes back one screen; it does not exit from the collection screen.
 - Select opens help. B or Select closes help.
+- The bottom bar always shows Select = Help. While help is open, Y switches
+  between German and English; the selection is saved.
 - X scans the library again on collection and CoverFlow/list screens.
   The scan refreshes every configured collection.
 - Y switches between CoverFlow and list where folders are shown.
