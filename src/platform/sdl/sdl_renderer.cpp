@@ -35,6 +35,11 @@ std::size_t utf8ByteOffsetOfCodepoint(const std::string& text, std::size_t codep
 // is the cursor position".
 constexpr SDL_Color kActiveAccent{86, 163, 255, 255};
 
+struct HelpRow {
+    const char* key = nullptr;
+    const char* action = nullptr;
+};
+
 std::string formatTime(double value) {
     const int seconds = std::max(0, static_cast<int>(value));
     const int hours = seconds / 3600;
@@ -124,9 +129,15 @@ void SdlRenderer::setPlaybackStatus(bool active, bool paused, double positionSec
 void SdlRenderer::setView(ViewModel view) {
     if (view.screen == Screen::CoverFlow && view_.screen == Screen::CoverFlow &&
         view.selected != view_.selected && !view.items.empty() && view.items.size() == view_.items.size()) {
-        flowAnimationDirection_ = view.selected > view_.selected ? 1 : -1;
-        flowAnimationActive_ = true;
-        flowAnimationStartedAt_ = SDL_GetTicks();
+        const Uint32 now = SDL_GetTicks();
+        // Keep the currently visible position when another direction press
+        // arrives mid-transition. Restarting from a whole slot made covers jump.
+        const float shift = static_cast<float>(view.selected) - static_cast<float>(view_.selected);
+        flowAnimationStartOffset_ = std::clamp(coverFlowOffset(now) + shift, -2.5F, 2.5F);
+        flowAnimationDurationMs_ = static_cast<Uint32>(std::clamp(
+            250.0F * std::abs(flowAnimationStartOffset_), 170.0F, 420.0F));
+        flowAnimationActive_ = std::abs(flowAnimationStartOffset_) > 0.01F;
+        flowAnimationStartedAt_ = now;
     } else if (view.screen != Screen::CoverFlow || view_.screen != Screen::CoverFlow) {
         flowAnimationActive_ = false;
     }
@@ -184,20 +195,43 @@ SDL_Texture* SdlRenderer::loadCoverTexture(const std::string& path) {
 
 void SdlRenderer::updateCoverFlowTextures() {
     constexpr long long centerSlot = 4;
+    std::array<std::string, 9> desiredPaths{};
     for (std::size_t slot = 0; slot < flowTextures_.size(); ++slot) {
-        std::string path;
         if (view_.screen == Screen::CoverFlow && !view_.itemImages.empty()) {
             const auto count = static_cast<long long>(view_.itemImages.size());
             const auto offset = static_cast<long long>(slot) - centerSlot;
             const auto index = static_cast<long long>(view_.selected) + offset;
-            if (index >= 0 && index < count) path = view_.itemImages[static_cast<std::size_t>(index)];
+            if (index >= 0 && index < count) desiredPaths[slot] = view_.itemImages[static_cast<std::size_t>(index)];
         }
-        if (loadedFlowPaths_[slot] == path) continue;
-        SDL_DestroyTexture(flowTextures_[slot]);
-        flowTextures_[slot] = nullptr;
-        loadedFlowPaths_[slot] = path;
-        if (!path.empty()) flowTextures_[slot] = loadCoverTexture(path);
     }
+    std::array<SDL_Texture*, 9> nextTextures{};
+    std::array<bool, 9> reused{};
+    for (std::size_t slot = 0; slot < nextTextures.size(); ++slot) {
+        if (desiredPaths[slot].empty()) continue;
+        // Most covers merely move by one slot. Reuse their decoded textures
+        // instead of destroying and decoding them on every navigation press.
+        bool matched = false;
+        for (std::size_t old = 0; old < flowTextures_.size(); ++old) {
+            if (!reused[old] && loadedFlowPaths_[old] == desiredPaths[slot]) {
+                nextTextures[slot] = std::exchange(flowTextures_[old], nullptr);
+                reused[old] = true;
+                matched = true;
+                break;
+            }
+        }
+        if (!matched) nextTextures[slot] = loadCoverTexture(desiredPaths[slot]);
+    }
+    for (auto* texture : flowTextures_) SDL_DestroyTexture(texture);
+    flowTextures_ = nextTextures;
+    loadedFlowPaths_ = std::move(desiredPaths);
+}
+
+float SdlRenderer::coverFlowOffset(Uint32 now) const {
+    if (!flowAnimationActive_) return 0.0F;
+    const float progress = std::min(1.0F,
+        static_cast<float>(now - flowAnimationStartedAt_) / static_cast<float>(flowAnimationDurationMs_));
+    const float remaining = 1.0F - progress;
+    return flowAnimationStartOffset_ * remaining * remaining * remaining;
 }
 
 void SdlRenderer::drawText(const char* text, int x, int y, SDL_Color color, TTF_Font* font) {
@@ -313,13 +347,10 @@ void SdlRenderer::renderCoverFlow() {
         return;
     }
     const auto count = view_.items.size();
-    float progress = 1.0F;
-    if (flowAnimationActive_) {
-        progress = std::min(1.0F, static_cast<float>(SDL_GetTicks() - flowAnimationStartedAt_) / 270.0F);
-        if (progress >= 1.0F) flowAnimationActive_ = false;
-    }
-    const float eased = 1.0F - std::pow(1.0F - progress, 3.0F);
-    const float animationOffset = flowAnimationActive_ ? flowAnimationDirection_ * (1.0F - eased) : 0.0F;
+    const Uint32 now = SDL_GetTicks();
+    const float animationOffset = coverFlowOffset(now);
+    if (flowAnimationActive_ && now - flowAnimationStartedAt_ >= flowAnimationDurationMs_)
+        flowAnimationActive_ = false;
     constexpr int centerSlot = 4;
     std::vector<int> slots;
     for (int slot = 0; slot < static_cast<int>(flowTextures_.size()); ++slot) {
@@ -373,13 +404,16 @@ void SdlRenderer::renderCoverFlow() {
     }
     SDL_SetRenderDrawColor(renderer_, 92, 211, 151, 215);
     SDL_RenderDrawLine(renderer_, 213, 312, 427, 312);
-    const auto separator = view_.items[view_.selected].find('|');
-    const auto name = view_.items[view_.selected].substr(0, separator);
-    const auto detail = separator == std::string::npos ? std::string{} : view_.items[view_.selected].substr(separator + 1);
+    const auto captionIndex = static_cast<std::size_t>(std::clamp(
+        std::lround(static_cast<float>(view_.selected) - animationOffset), 0L,
+        static_cast<long>(count - 1)));
+    const auto separator = view_.items[captionIndex].find('|');
+    const auto name = view_.items[captionIndex].substr(0, separator);
+    const auto detail = separator == std::string::npos ? std::string{} : view_.items[captionIndex].substr(separator + 1);
     int textWidth = 0, textHeight = 0;
     TTF_SizeUTF8(titleFont_, name.c_str(), &textWidth, &textHeight);
     drawFittedText(name, std::max(20, (640 - textWidth) / 2), 352, 38, SDL_Color{244,247,251,255}, titleFont_);
-    const std::string meta = detail + "    " + std::to_string(view_.selected + 1) + "/" + std::to_string(count);
+    const std::string meta = detail + "    " + std::to_string(captionIndex + 1) + "/" + std::to_string(count);
     TTF_SizeUTF8(font_, meta.c_str(), &textWidth, &textHeight);
     drawText(meta.c_str(), std::max(20, (640 - textWidth) / 2), 394, SDL_Color{143,154,170,255});
 }
@@ -579,26 +613,48 @@ void SdlRenderer::renderHandheldUi() {
     SDL_SetRenderDrawColor(renderer_,37,71,61,255);const SDL_Rect helpBadge{478,430,146,38};SDL_RenderFillRect(renderer_,&helpBadge);
     drawText(tr(language_,"SELECT HILFE"),484,440,SDL_Color{232,247,239,255});
     if(helpVisible_){
-        SDL_SetRenderDrawBlendMode(renderer_,SDL_BLENDMODE_NONE);SDL_SetRenderDrawColor(renderer_,7,9,14,255);const SDL_Rect panel{0,70,640,410};SDL_RenderFillRect(renderer_,&panel);
-        drawText(tr(language_,"BEDIENUNG"),54,92,SDL_Color{92,211,151,255});
-        std::array<const char*,7> lines{};
+        SDL_SetRenderDrawBlendMode(renderer_,SDL_BLENDMODE_NONE);
+        SDL_SetRenderDrawColor(renderer_,7,9,14,255);
+        const SDL_Rect backdrop{0,70,640,410};SDL_RenderFillRect(renderer_,&backdrop);
+        SDL_SetRenderDrawColor(renderer_,19,25,34,255);
+        const SDL_Rect panel{24,76,592,342};SDL_RenderFillRect(renderer_,&panel);
+        drawText(tr(language_,"BEDIENUNG"),44,88,SDL_Color{92,211,151,255});
+        drawText(tr(language_,"TASTE"),58,121,SDL_Color{143,154,170,255});
+        drawText(tr(language_,"AKTION"),220,121,SDL_Color{143,154,170,255});
+        SDL_SetRenderDrawColor(renderer_,51,61,73,255);
+        SDL_RenderDrawLine(renderer_,44,145,596,145);
+        std::array<HelpRow,7> rows{};
+        const char* note = nullptr;
         switch (view_.screen) {
-            case Screen::Player: lines={"A  Wiedergabe / Pause","Links/Rechts  10 Sek. spulen","L1/R1  30 Sek. spulen","Oben/Unten  Titel wechseln","Y  Lesezeichen setzen; X  naechstes","START kurz  Sleep-Timer","START 2 Sek.  Hintergrundwiedergabe"}; break;
-            case Screen::Collections: lines={"A  Sammlung oeffnen","Steuerkreuz  Sammlung waehlen","Y  Sammlungen verwalten","X  Bibliothek scannen","B  Bleibt in der App"}; break;
-            case Screen::CollectionManager: lines={"A  Typ und Namen bearbeiten","Y  Pfad bearbeiten / neu anlegen","X  Sammlung loeschen","L1/R1  Reihenfolge verschieben","B  Zurueck zur Bibliothek"}; break;
-            case Screen::CollectionType: lines={"A  Sammlungstyp waehlen","Steuerkreuz  Typ auswaehlen","B  Zurueck"}; break;
-            case Screen::CollectionDelete: lines={"A  Sammlung entfernen","B  Abbrechen","Mediendateien werden nie geloescht"}; break;
-            case Screen::CollectionName: lines={"A  Zeichen anfuegen","X  Letztes Zeichen loeschen","L1  Namen komplett leeren","Y  Sammlung speichern","B  Abbrechen"}; break;
-            case Screen::Bluetooth: lines={"A  Verbinden / trennen","X  Bluetooth an / aus","Y  Status aktualisieren","B  Zurueck","Neue Geraete in Knulli koppeln"}; break;
+            case Screen::Player: rows={{{"A","Wiedergabe / Pause"},{"LINKS/RECHTS","10 Sek. spulen"},{"L1/R1","30 Sek. spulen"},{"OBEN/UNTEN","Titel wechseln"},{"Y / X","Lesezeichen setzen / naechstes"},{"START KURZ","Sleep-Timer"},{"START 2s","Hintergrundwiedergabe"}}}; break;
+            case Screen::Collections: rows={{{"A","Sammlung oeffnen"},{"STEUERKREUZ","Sammlung waehlen"},{"Y","Sammlungen verwalten"},{"X","Bibliothek scannen"},{"B","App bleibt geoeffnet"}}}; break;
+            case Screen::CollectionManager: rows={{{"A","Typ und Namen bearbeiten"},{"Y","Pfad bearbeiten / neu anlegen"},{"X","Sammlung loeschen"},{"L1/R1","Reihenfolge verschieben"},{"B","Zurueck zur Bibliothek"}}}; break;
+            case Screen::CollectionType: rows={{{"A","Sammlungstyp waehlen"},{"STEUERKREUZ","Typ auswaehlen"},{"B","Zurueck"}}}; break;
+            case Screen::CollectionDelete: rows={{{"A","Sammlung entfernen"},{"B","Abbrechen"}}}; note="Mediendateien werden nie geloescht"; break;
+            case Screen::CollectionName: rows={{{"A","Zeichen anfuegen"},{"X","Letztes Zeichen loeschen"},{"L1","Namen komplett leeren"},{"Y","Sammlung speichern"},{"B","Abbrechen"}}}; break;
+            case Screen::Bluetooth: rows={{{"A","Verbinden / trennen"},{"X","Bluetooth an / aus"},{"Y","Status aktualisieren"},{"B","Zurueck"}}}; note="Neue Geraete in Knulli koppeln"; break;
             case Screen::CoverFlow:
-            case Screen::AlbumList: lines={"A  Ordner / Medium oeffnen","B  Eine Ebene zurueck","Links/Rechts  Eintrag waehlen","Y  CoverFlow / Liste","X  Sammlung neu scannen"}; break;
-            case Screen::Tracks: lines={"A  Abspielen / Fortsetzen","B  Zurueck zur Albumansicht","Steuerkreuz  Titel auswaehlen","Fortsetzbarer Titel ist vorausgewaehlt"}; break;
-            case Screen::Folders: lines={"A  Ordner oeffnen","B  Zurueck","Y  Diesen Ordner auswaehlen"}; break;
+            case Screen::AlbumList: rows={{{"A","Ordner / Medium oeffnen"},{"B","Eine Ebene zurueck"},{"LINKS/RECHTS","Eintrag waehlen"},{"Y","CoverFlow / Liste"},{"X","Sammlung neu scannen"}}}; break;
+            case Screen::Tracks: rows={{{"A","Abspielen / Fortsetzen"},{"B","Zurueck zur Albumansicht"},{"STEUERKREUZ","Titel auswaehlen"}}}; note="Fortsetzbarer Titel ist vorausgewaehlt"; break;
+            case Screen::Folders: rows={{{"A","Ordner oeffnen"},{"B","Zurueck"},{"Y","Diesen Ordner auswaehlen"}}}; break;
         }
-        for (std::size_t index=0;index<lines.size();++index) {
-            if (lines[index] != nullptr) drawFittedText(tr(language_,lines[index]),54,132+static_cast<int>(index)*31,47,SDL_Color{244,247,251,255});
+        for (std::size_t index=0;index<rows.size() && rows[index].key!=nullptr;++index) {
+            const int y=151+static_cast<int>(index)*31;
+            if (index%2==0) {
+                SDL_SetRenderDrawColor(renderer_,25,32,42,255);
+                const SDL_Rect stripe{40,y-3,560,30};SDL_RenderFillRect(renderer_,&stripe);
+            }
+            SDL_SetRenderDrawColor(renderer_,39,72,64,255);
+            const SDL_Rect keycap{48,y,153,25};SDL_RenderFillRect(renderer_,&keycap);
+            SDL_SetRenderDrawColor(renderer_,92,211,151,255);SDL_RenderDrawRect(renderer_,&keycap);
+            const char* key=tr(language_,rows[index].key);
+            int keyWidth=0,keyHeight=0;
+            TTF_SizeUTF8(font_,key,&keyWidth,&keyHeight);
+            drawFittedText(key,48+std::max(4,(153-keyWidth)/2),y+3,13,SDL_Color{232,247,239,255});
+            drawFittedText(tr(language_,rows[index].action),220,y+3,34,SDL_Color{244,247,251,255});
         }
-        drawFittedText(tr(language_,"START+SELECT  App beenden (Hilfe zu)"),54,365,47,SDL_Color{242,190,92,255});
+        if (note!=nullptr) drawFittedText(tr(language_,note),48,365,48,SDL_Color{143,154,170,255});
+        drawFittedText(tr(language_,"START+SELECT  App beenden (Hilfe zu)"),48,390,48,SDL_Color{242,190,92,255});
         SDL_SetRenderDrawColor(renderer_,19,23,32,255);const SDL_Rect helpFooter{0,423,640,57};SDL_RenderFillRect(renderer_,&helpFooter);
         drawText(language_==Language::German?"Y ENGLISH":"Y DEUTSCH",18,442,SDL_Color{92,211,151,255});
         if(bluetoothCapable_&&view_.screen!=Screen::Bluetooth)drawText("X BLUETOOTH",180,442,SDL_Color{171,181,196,255});

@@ -62,6 +62,7 @@ private:
     void drawBatteryIcon(int x, int y, int percent);
     void updateCover();
     void updateCoverFlowTextures();
+    [[nodiscard]] float coverFlowOffset(Uint32 now) const;
     SDL_Texture* loadCoverTexture(const std::string& path);
 
     SDL_Window* window_ = nullptr;
@@ -89,8 +90,9 @@ private:
     std::array<SDL_Texture*, 9> flowTextures_{};
     std::array<std::string, 9> loadedFlowPaths_{};
     bool flowAnimationActive_ = false;
-    int flowAnimationDirection_ = 0;
+    float flowAnimationStartOffset_ = 0.0F;
     Uint32 flowAnimationStartedAt_ = 0;
+    Uint32 flowAnimationDurationMs_ = 250;
 };
 
 } // namespace coverplayer::platform
