@@ -84,9 +84,10 @@ cmake --preset desktop-debug
 cmake --build --preset desktop-debug
 ```
 
-With Docker Desktop and the required ARM64 build environment, run
-`./scripts/Build-Packages.ps1` in PowerShell to build Knulli and muOS
-archives. This does not install anything on a handheld. See the
+On Windows, `./scripts/Build-And-Test.ps1` runs the desktop tests and builds
+the Knulli and muOS archives. It needs MSYS2 UCRT64, Python, and Docker
+Desktop. Pass `-Mp3Path <file>` to include the optional real-file seek test.
+This does not install anything on a handheld. See the
 [package notes](packaging/README.md) for installation details. muOS hardware
 validation and future Switch/PortMaster ports remain open work.
 
