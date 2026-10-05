@@ -69,6 +69,7 @@ private:
     SDL_Renderer* renderer_ = nullptr;
     TTF_Font* font_ = nullptr;
     TTF_Font* titleFont_ = nullptr;
+    int uiWidth_ = 640;
 
     bool playbackActive_ = false;
     bool playbackPaused_ = false;

@@ -58,12 +58,29 @@ SdlRenderer::SdlRenderer() {
     }
     IMG_Init(IMG_INIT_JPG | IMG_INIT_PNG);
 
+    int windowWidth = 640;
+    int windowHeight = 480;
+    SDL_DisplayMode display{};
+    const bool hasDisplayMode = SDL_GetCurrentDisplayMode(0, &display) == 0;
+    const char* requestedWidth = SDL_getenv("COVERPLAYER_UI_WIDTH");
+    if (requestedWidth != nullptr && std::string(requestedWidth) == "720") {
+        uiWidth_ = windowWidth = 720;
+    } else if (requestedWidth == nullptr && hasDisplayMode &&
+        display.w >= 720 && display.w <= 960 && display.h >= 480 && display.h <= 640 &&
+        std::abs(static_cast<float>(display.w) / display.h - 1.5F) < 0.03F) {
+        // Use the available width on compact 3:2 handheld screens. The
+        // original 640x480 design remains unchanged on 4:3 displays.
+        uiWidth_ = 720;
+        windowWidth = display.w;
+        windowHeight = display.h;
+    }
+
     window_ = SDL_CreateWindow(
         "CoverPlayer",
         SDL_WINDOWPOS_CENTERED,
         SDL_WINDOWPOS_CENTERED,
-        640,
-        480,
+        windowWidth,
+        windowHeight,
         SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE);
     if (window_ == nullptr) {
         const std::string message = SDL_GetError();
@@ -75,7 +92,8 @@ SdlRenderer::SdlRenderer() {
     if (renderer_ == nullptr) {
         renderer_ = SDL_CreateRenderer(window_, -1, SDL_RENDERER_SOFTWARE);
     }
-    SDL_RenderSetLogicalSize(renderer_, 640, 480);
+    SDL_RenderSetLogicalSize(renderer_, uiWidth_, 480);
+    SDL_Log("CoverPlayer UI: %dx480, window: %dx%d", uiWidth_, windowWidth, windowHeight);
     if (renderer_ == nullptr) {
         const std::string message = SDL_GetError();
         SDL_DestroyWindow(window_);
@@ -274,10 +292,10 @@ void SdlRenderer::drawPerspectiveCover(SDL_Texture* texture, float offset, Uint8
     const float distance = std::min(4.0F, std::abs(offset));
     const float sideDistance = std::min(1.0F, distance);
     const float direction = offset < 0.0F ? -1.0F : 1.0F;
-    const float travel = distance <= 1.0F
+    const float travel = (distance <= 1.0F
         ? 154.0F * std::pow(distance, 0.72F)
-        : 154.0F + (distance - 1.0F) * 44.0F;
-    const float centerX = 320.0F + direction * travel;
+        : 154.0F + (distance - 1.0F) * 44.0F) * static_cast<float>(uiWidth_) / 640.0F;
+    const float centerX = static_cast<float>(uiWidth_) * 0.5F + direction * travel;
     const float coverHeight = 218.0F - 19.0F * sideDistance;
     const float top = 91.0F + 10.0F * sideDistance;
     const float turn = std::min(0.88F, distance * 0.82F);
@@ -372,7 +390,7 @@ void SdlRenderer::renderCoverFlow() {
         const int halfWidth = static_cast<int>(190.0F * t);
         const int halfHeight = static_cast<int>(150.0F * t);
         SDL_SetRenderDrawColor(renderer_, 40, 52, 56, 10);
-        const SDL_Rect band{320 - halfWidth, 200 - halfHeight, halfWidth * 2, halfHeight * 2};
+        const SDL_Rect band{uiWidth_ / 2 - halfWidth, 200 - halfHeight, halfWidth * 2, halfHeight * 2};
         SDL_RenderFillRect(renderer_, &band);
     }
     for (const int slot : slots) {
@@ -383,7 +401,7 @@ void SdlRenderer::renderCoverFlow() {
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
     for (int row = 0; row < 46; ++row) {
         SDL_SetRenderDrawColor(renderer_, 12, 15, 22, static_cast<Uint8>(35 + row * 4));
-        SDL_RenderDrawLine(renderer_, 0, 314 + row, 639, 314 + row);
+        SDL_RenderDrawLine(renderer_, 0, 314 + row, uiWidth_ - 1, 314 + row);
     }
     for (const int slot : slots) {
         const float offset = static_cast<float>(slot - centerSlot) + animationOffset;
@@ -398,12 +416,12 @@ void SdlRenderer::renderCoverFlow() {
         for (int ring = 0; ring < ringCount; ++ring) {
             const int inset = 3 + ring * 2;
             SDL_SetRenderDrawColor(renderer_, 92, 211, 151, static_cast<Uint8>(190 - ring * 28));
-            const SDL_Rect frame{211 - inset, 91 - inset, 218 + 2 * inset, 218 + 2 * inset};
+            const SDL_Rect frame{uiWidth_ / 2 - 109 - inset, 91 - inset, 218 + 2 * inset, 218 + 2 * inset};
             SDL_RenderDrawRect(renderer_, &frame);
         }
     }
     SDL_SetRenderDrawColor(renderer_, 92, 211, 151, 215);
-    SDL_RenderDrawLine(renderer_, 213, 312, 427, 312);
+    SDL_RenderDrawLine(renderer_, uiWidth_ / 2 - 107, 312, uiWidth_ / 2 + 107, 312);
     const auto captionIndex = static_cast<std::size_t>(std::clamp(
         std::lround(static_cast<float>(view_.selected) - animationOffset), 0L,
         static_cast<long>(count - 1)));
@@ -412,10 +430,10 @@ void SdlRenderer::renderCoverFlow() {
     const auto detail = separator == std::string::npos ? std::string{} : view_.items[captionIndex].substr(separator + 1);
     int textWidth = 0, textHeight = 0;
     TTF_SizeUTF8(titleFont_, name.c_str(), &textWidth, &textHeight);
-    drawFittedText(name, std::max(20, (640 - textWidth) / 2), 352, 38, SDL_Color{244,247,251,255}, titleFont_);
+    drawFittedText(name, std::max(20, (uiWidth_ - textWidth) / 2), 352, 38 + (uiWidth_ - 640) / 14, SDL_Color{244,247,251,255}, titleFont_);
     const std::string meta = detail + "    " + std::to_string(captionIndex + 1) + "/" + std::to_string(count);
     TTF_SizeUTF8(font_, meta.c_str(), &textWidth, &textHeight);
-    drawText(meta.c_str(), std::max(20, (640 - textWidth) / 2), 394, SDL_Color{143,154,170,255});
+    drawText(meta.c_str(), std::max(20, (uiWidth_ - textWidth) / 2), 394, SDL_Color{143,154,170,255});
 }
 
 void SdlRenderer::drawPlaybackSymbol(int centerX, int centerY, bool paused) {
@@ -508,9 +526,10 @@ void SdlRenderer::drawBatteryIcon(int x, int y, int percent) {
 }
 
 void SdlRenderer::renderHandheldUi() {
+    const int extraWidth = uiWidth_ - 640;
     SDL_SetRenderDrawColor(renderer_,12,15,22,255);SDL_RenderClear(renderer_);
-    SDL_SetRenderDrawColor(renderer_,24,30,42,255);const SDL_Rect header{0,0,640,70};SDL_RenderFillRect(renderer_,&header);
-    SDL_SetRenderDrawColor(renderer_,92,211,151,255);const SDL_Rect accent{0,68,640,3};SDL_RenderFillRect(renderer_,&accent);
+    SDL_SetRenderDrawColor(renderer_,24,30,42,255);const SDL_Rect header{0,0,uiWidth_,70};SDL_RenderFillRect(renderer_,&header);
+    SDL_SetRenderDrawColor(renderer_,92,211,151,255);const SDL_Rect accent{0,68,uiWidth_,3};SDL_RenderFillRect(renderer_,&accent);
     drawText("COVER",20,20,SDL_Color{92,211,151,255});drawText("PLAYER",86,20,SDL_Color{244,247,251,255});
     const char* section = "JETZT LAEUFT";
     if (view_.screen == Screen::Collections) section = "BIBLIOTHEK";
@@ -524,75 +543,76 @@ void SdlRenderer::renderHandheldUi() {
     else if (view_.screen == Screen::Folders) section = "ORDNER";
     else if (view_.screen == Screen::Bluetooth) section = "BLUETOOTH";
     if(view_.screen==Screen::Player){
-        drawText(tr(language_,section),252,22,SDL_Color{155,166,184,255});drawBluetoothIcon(400,20);
-        const std::string volume="VOL "+std::to_string(volumePercent_)+"%";drawText(volume.c_str(),430,22,SDL_Color{203,210,220,255});
-        if(batteryPercent_){drawBatteryIcon(528,24,*batteryPercent_);const std::string battery=std::to_string(*batteryPercent_)+"%";drawText(battery.c_str(),558,22,SDL_Color{203,210,220,255});}
-        if(sleepMinutes_>0){const std::string sleep=std::to_string(sleepMinutes_)+"m";drawText(sleep.c_str(),607,22,SDL_Color{242,190,92,255});}
+        drawText(tr(language_,section),252+extraWidth,22,SDL_Color{155,166,184,255});drawBluetoothIcon(400+extraWidth,20);
+        const std::string volume="VOL "+std::to_string(volumePercent_)+"%";drawText(volume.c_str(),430+extraWidth,22,SDL_Color{203,210,220,255});
+        if(batteryPercent_){drawBatteryIcon(528+extraWidth,24,*batteryPercent_);const std::string battery=std::to_string(*batteryPercent_)+"%";drawText(battery.c_str(),558+extraWidth,22,SDL_Color{203,210,220,255});}
+        if(sleepMinutes_>0){const std::string sleep=std::to_string(sleepMinutes_)+"m";drawText(sleep.c_str(),607+extraWidth,22,SDL_Color{242,190,92,255});}
     } else {
-        drawBluetoothIcon(433,20);
+        drawBluetoothIcon(433+extraWidth,20);
         // The section label and the sleep badge each get a fixed slot so
         // neither hides the other - previously the sleep timer replaced the
         // screen name entirely, which lost the "where am I" context.
-        drawFittedText(tr(language_,section),458,22,12,SDL_Color{155,166,184,255});
-        if(sleepMinutes_>0){const std::string sleep=std::to_string(sleepMinutes_)+"m";drawText(sleep.c_str(),606,22,SDL_Color{242,190,92,255});}
+        drawFittedText(tr(language_,section),458+extraWidth,22,12,SDL_Color{155,166,184,255});
+        if(sleepMinutes_>0){const std::string sleep=std::to_string(sleepMinutes_)+"m";drawText(sleep.c_str(),606+extraWidth,22,SDL_Color{242,190,92,255});}
     }
 
     if(view_.screen==Screen::CoverFlow){
         renderCoverFlow();
     } else if(view_.screen==Screen::Player){
         drawCover(25,100,225,225);
-        drawFittedText(view_.title,275,100,26,SDL_Color{244,247,251,255},titleFont_);
-        drawFittedText(view_.subtitle,275,148,31,SDL_Color{143,154,170,255});
+        drawFittedText(view_.title,275,100,26+extraWidth/16,SDL_Color{244,247,251,255},titleFont_);
+        drawFittedText(view_.subtitle,275,148,31+extraWidth/11,SDL_Color{143,154,170,255});
         drawText((std::string(tr(language_,"LESEZEICHEN"))+"  "+std::to_string(bookmarkCount_)).c_str(),275,181,SDL_Color{143,154,170,255});
-        if(!notice_.empty())drawFittedText(notice_,275,225,31,SDL_Color{242,190,92,255});
-        if(!view_.message.empty())drawFittedText(view_.message,275,270,31,SDL_Color{242,118,109,255});
+        if(!notice_.empty())drawFittedText(notice_,275,225,31+extraWidth/11,SDL_Color{242,190,92,255});
+        if(!view_.message.empty())drawFittedText(view_.message,275,270,31+extraWidth/11,SDL_Color{242,118,109,255});
 
         // The rail is a clean, uninterrupted bar; the play/pause symbol gets
         // its own row below it instead of sitting on top of the rail, with
         // the elapsed/remaining time flanking it on the same row.
-        const int railX=24, railY=335, railWidth=592;
+        const int railX=24, railY=335, railWidth=uiWidth_-48;
         SDL_SetRenderDrawColor(renderer_,42,49,62,255);const SDL_Rect rail{railX,railY,railWidth,8};SDL_RenderFillRect(renderer_,&rail);
         if(playbackDurationSeconds_>0.0){const auto progress=std::min(1.0,playbackPositionSeconds_/playbackDurationSeconds_);SDL_SetRenderDrawColor(renderer_,kActiveAccent.r,kActiveAccent.g,kActiveAccent.b,kActiveAccent.a);const SDL_Rect filled{railX,railY,static_cast<int>(railWidth*progress),8};SDL_RenderFillRect(renderer_,&filled);}
         const int transportY=375;
-        drawPlaybackSymbol(320,transportY,playbackPaused_);
+        drawPlaybackSymbol(uiWidth_/2,transportY,playbackPaused_);
         drawText(formatTime(playbackPositionSeconds_).c_str(),railX,transportY-11,SDL_Color{203,210,220,255});
-        const auto duration=playbackDurationSeconds_>0.0?formatTime(playbackDurationSeconds_):"--:--";int durationWidth=0,durationHeight=0;TTF_SizeUTF8(font_,duration.c_str(),&durationWidth,&durationHeight);drawText(duration.c_str(),616-durationWidth,transportY-11,SDL_Color{203,210,220,255});
+        const auto duration=playbackDurationSeconds_>0.0?formatTime(playbackDurationSeconds_):"--:--";int durationWidth=0,durationHeight=0;TTF_SizeUTF8(font_,duration.c_str(),&durationWidth,&durationHeight);drawText(duration.c_str(),uiWidth_-24-durationWidth,transportY-11,SDL_Color{203,210,220,255});
     } else if(view_.screen==Screen::Collections||view_.screen==Screen::AlbumList) {
-        drawFittedText(view_.title,24,82,32,SDL_Color{244,247,251,255},titleFont_);
+        drawFittedText(view_.title,24,82,32+extraWidth/16,SDL_Color{244,247,251,255},titleFont_);
         drawCover(24,126,122,122);
-        drawSelectableList(view_.items,view_.selected,{166,450,49,120,6,39,true});
-        if(!view_.message.empty())drawFittedText(view_.message,24,391,58,SDL_Color{143,154,170,255});
+        drawSelectableList(view_.items,view_.selected,{166,uiWidth_-190,49,120,6,39+extraWidth/11,true});
+        if(!view_.message.empty())drawFittedText(view_.message,24,391,58+extraWidth/11,SDL_Color{143,154,170,255});
     } else if(view_.screen==Screen::CollectionManager) {
-        drawFittedText(view_.title,24,82,30,SDL_Color{244,247,251,255},titleFont_);
-        if(!view_.coverPath.empty())drawCover(500,124,104,104);
-        drawSelectableList(view_.items,view_.selected,{24,452,43,126,6,38,true});
-        if(!view_.message.empty())drawFittedText(view_.message,24,389,57,SDL_Color{143,154,170,255});
+        drawFittedText(view_.title,24,82,30+extraWidth/16,SDL_Color{244,247,251,255},titleFont_);
+        if(!view_.coverPath.empty())drawCover(uiWidth_-140,124,104,104);
+        drawSelectableList(view_.items,view_.selected,{24,uiWidth_-188,43,126,6,38+extraWidth/11,true});
+        if(!view_.message.empty())drawFittedText(view_.message,24,389,57+extraWidth/11,SDL_Color{143,154,170,255});
     } else if(view_.screen==Screen::Bluetooth) {
-        drawFittedText(view_.title,24,84,30,SDL_Color{244,247,251,255},titleFont_);
-        drawFittedText(view_.subtitle,24,132,60,SDL_Color{143,154,170,255});
-        drawSelectableList(view_.items,view_.selected,{24,592,31,184,7,57,false});
-        if(!view_.message.empty())drawFittedText(view_.message,24,397,64,SDL_Color{242,190,92,255});
+        drawFittedText(view_.title,24,84,30+extraWidth/16,SDL_Color{244,247,251,255},titleFont_);
+        drawFittedText(view_.subtitle,24,132,60+extraWidth/11,SDL_Color{143,154,170,255});
+        drawSelectableList(view_.items,view_.selected,{24,uiWidth_-48,31,184,7,57+extraWidth/11,false});
+        if(!view_.message.empty())drawFittedText(view_.message,24,397,64+extraWidth/11,SDL_Color{242,190,92,255});
     } else if(view_.screen==Screen::CollectionName) {
         drawText(tr(language_,"NAME DER SAMMLUNG"),24,94,SDL_Color{143,154,170,255});
-        SDL_SetRenderDrawColor(renderer_,31,38,50,255);const SDL_Rect nameField{24,121,592,42};SDL_RenderFillRect(renderer_,&nameField);
+        SDL_SetRenderDrawColor(renderer_,31,38,50,255);const SDL_Rect nameField{24,121,uiWidth_-48,42};SDL_RenderFillRect(renderer_,&nameField);
         SDL_SetRenderDrawColor(renderer_,92,211,151,255);const SDL_Rect nameMarker{24,121,4,42};SDL_RenderFillRect(renderer_,&nameMarker);
-        drawFittedText(view_.subtitle,40,131,52,SDL_Color{244,247,251,255});
+        drawFittedText(view_.subtitle,40,131,52+extraWidth/11,SDL_Color{244,247,251,255});
         for(std::size_t index=0;index<view_.items.size();++index){
             const int column=static_cast<int>(index%10),row=static_cast<int>(index/10);
-            const int x=24+column*59,y=177+row*31;
-            if(index==view_.selected){SDL_SetRenderDrawColor(renderer_,45,82,70,255);const SDL_Rect selected{x,y,54,27};SDL_RenderFillRect(renderer_,&selected);}
+            const int cellWidth=(uiWidth_-48)/10;
+            const int x=24+column*cellWidth,y=177+row*31;
+            if(index==view_.selected){SDL_SetRenderDrawColor(renderer_,45,82,70,255);const SDL_Rect selected{x,y,cellWidth-5,27};SDL_RenderFillRect(renderer_,&selected);}
             const auto& key=view_.items[index];
-            drawFittedText(key,x+(key.size()>1?3:20),y+4,6,index==view_.selected?SDL_Color{244,247,251,255}:SDL_Color{158,168,184,255});
+            drawFittedText(key,x+(key.size()>1?3:(cellWidth-19)/2),y+4,6,index==view_.selected?SDL_Color{244,247,251,255}:SDL_Color{158,168,184,255});
         }
-        if(!view_.message.empty())drawFittedText(view_.message,24,401,65,SDL_Color{242,190,92,255});
+        if(!view_.message.empty())drawFittedText(view_.message,24,401,65+extraWidth/11,SDL_Color{242,190,92,255});
     } else {
-        const bool hasCover=!view_.coverPath.empty();const int listX=hasCover?272:24;const int listWidth=hasCover?346:592;const int maxCharacters=hasCover?20:37;
+        const bool hasCover=!view_.coverPath.empty();const int listX=hasCover?272:24;const int listWidth=hasCover?uiWidth_-294:uiWidth_-48;const int maxCharacters=(hasCover?20:37)+extraWidth/11;
         if(hasCover) drawCover(25,100,225,225);
-        drawFittedText(view_.title,hasCover?280:24,88,hasCover?20:37,SDL_Color{244,247,251,255},titleFont_);
+        drawFittedText(view_.title,hasCover?280:24,88,(hasCover?20:37)+extraWidth/16,SDL_Color{244,247,251,255},titleFont_);
         drawSelectableList(view_.items,view_.selected,{listX,listWidth,31,134,9,maxCharacters,false});
-        if(!view_.message.empty())drawFittedText(view_.message,25,345,65,SDL_Color{143,154,170,255});
+        if(!view_.message.empty())drawFittedText(view_.message,25,345,65+extraWidth/11,SDL_Color{143,154,170,255});
     }
-    SDL_SetRenderDrawColor(renderer_,19,23,32,255);const SDL_Rect footer{0,423,640,57};SDL_RenderFillRect(renderer_,&footer);
+    SDL_SetRenderDrawColor(renderer_,19,23,32,255);const SDL_Rect footer{0,423,uiWidth_,57};SDL_RenderFillRect(renderer_,&footer);
     const char* primaryHint = "A OEFFNEN   Y VERWALTEN   X SCANNEN";
     switch (view_.screen) {
         case Screen::Player: primaryHint = "A PLAY/PAUSE   B ZURUECK"; break;
@@ -607,22 +627,22 @@ void SdlRenderer::renderHandheldUi() {
         case Screen::Tracks: primaryHint = "A ABSPIELEN   B ZURUECK"; break;
         default: break;
     }
-    drawFittedText(tr(language_,primaryHint),18,view_.screen==Screen::Player?427:442,40,SDL_Color{171,181,196,255});
+    drawFittedText(tr(language_,primaryHint),18,view_.screen==Screen::Player?427:442,40+extraWidth/11,SDL_Color{171,181,196,255});
     if (view_.screen==Screen::Player)
-        drawFittedText(tr(language_,"START KURZ SLEEP / LANG HINTERGRUND"),18,451,40,SDL_Color{171,181,196,255});
-    SDL_SetRenderDrawColor(renderer_,37,71,61,255);const SDL_Rect helpBadge{478,430,146,38};SDL_RenderFillRect(renderer_,&helpBadge);
-    drawText(tr(language_,"SELECT HILFE"),484,440,SDL_Color{232,247,239,255});
+        drawFittedText(tr(language_,"START KURZ SLEEP / LANG HINTERGRUND"),18,451,40+extraWidth/11,SDL_Color{171,181,196,255});
+    SDL_SetRenderDrawColor(renderer_,37,71,61,255);const SDL_Rect helpBadge{uiWidth_-162,430,146,38};SDL_RenderFillRect(renderer_,&helpBadge);
+    drawText(tr(language_,"SELECT HILFE"),uiWidth_-156,440,SDL_Color{232,247,239,255});
     if(helpVisible_){
         SDL_SetRenderDrawBlendMode(renderer_,SDL_BLENDMODE_NONE);
         SDL_SetRenderDrawColor(renderer_,7,9,14,255);
-        const SDL_Rect backdrop{0,70,640,410};SDL_RenderFillRect(renderer_,&backdrop);
+        const SDL_Rect backdrop{0,70,uiWidth_,410};SDL_RenderFillRect(renderer_,&backdrop);
         SDL_SetRenderDrawColor(renderer_,19,25,34,255);
-        const SDL_Rect panel{24,76,592,342};SDL_RenderFillRect(renderer_,&panel);
+        const SDL_Rect panel{24,76,uiWidth_-48,342};SDL_RenderFillRect(renderer_,&panel);
         drawText(tr(language_,"BEDIENUNG"),44,88,SDL_Color{92,211,151,255});
         drawText(tr(language_,"TASTE"),58,121,SDL_Color{143,154,170,255});
         drawText(tr(language_,"AKTION"),220,121,SDL_Color{143,154,170,255});
         SDL_SetRenderDrawColor(renderer_,51,61,73,255);
-        SDL_RenderDrawLine(renderer_,44,145,596,145);
+        SDL_RenderDrawLine(renderer_,44,145,uiWidth_-44,145);
         std::array<HelpRow,7> rows{};
         const char* note = nullptr;
         switch (view_.screen) {
@@ -642,7 +662,7 @@ void SdlRenderer::renderHandheldUi() {
             const int y=151+static_cast<int>(index)*31;
             if (index%2==0) {
                 SDL_SetRenderDrawColor(renderer_,25,32,42,255);
-                const SDL_Rect stripe{40,y-3,560,30};SDL_RenderFillRect(renderer_,&stripe);
+                const SDL_Rect stripe{40,y-3,uiWidth_-80,30};SDL_RenderFillRect(renderer_,&stripe);
             }
             SDL_SetRenderDrawColor(renderer_,39,72,64,255);
             const SDL_Rect keycap{48,y,153,25};SDL_RenderFillRect(renderer_,&keycap);
@@ -651,14 +671,14 @@ void SdlRenderer::renderHandheldUi() {
             int keyWidth=0,keyHeight=0;
             TTF_SizeUTF8(font_,key,&keyWidth,&keyHeight);
             drawFittedText(key,48+std::max(4,(153-keyWidth)/2),y+3,13,SDL_Color{232,247,239,255});
-            drawFittedText(tr(language_,rows[index].action),220,y+3,34,SDL_Color{244,247,251,255});
+            drawFittedText(tr(language_,rows[index].action),220,y+3,34+extraWidth/11,SDL_Color{244,247,251,255});
         }
-        if (note!=nullptr) drawFittedText(tr(language_,note),48,365,48,SDL_Color{143,154,170,255});
-        drawFittedText(tr(language_,"START+SELECT  App beenden (Hilfe zu)"),48,390,48,SDL_Color{242,190,92,255});
-        SDL_SetRenderDrawColor(renderer_,19,23,32,255);const SDL_Rect helpFooter{0,423,640,57};SDL_RenderFillRect(renderer_,&helpFooter);
+        if (note!=nullptr) drawFittedText(tr(language_,note),48,365,48+extraWidth/11,SDL_Color{143,154,170,255});
+        drawFittedText(tr(language_,"START+SELECT  App beenden (Hilfe zu)"),48,390,48+extraWidth/11,SDL_Color{242,190,92,255});
+        SDL_SetRenderDrawColor(renderer_,19,23,32,255);const SDL_Rect helpFooter{0,423,uiWidth_,57};SDL_RenderFillRect(renderer_,&helpFooter);
         drawText(language_==Language::German?"Y ENGLISH":"Y DEUTSCH",18,442,SDL_Color{92,211,151,255});
         if(bluetoothCapable_&&view_.screen!=Screen::Bluetooth)drawText("X BLUETOOTH",180,442,SDL_Color{171,181,196,255});
-        drawText(tr(language_,"B / SELECT SCHLIESSEN"),386,442,SDL_Color{171,181,196,255});
+        drawText(tr(language_,"B / SELECT SCHLIESSEN"),uiWidth_-254,442,SDL_Color{171,181,196,255});
     }
     SDL_RenderPresent(renderer_);
 }

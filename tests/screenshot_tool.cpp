@@ -15,7 +15,10 @@ bool saveBackBuffer(const std::string& path) {
     if (window == nullptr) return false;
     SDL_Renderer* renderer = SDL_GetRenderer(window);
     if (renderer == nullptr) return false;
-    SDL_Surface* surface = SDL_CreateRGBSurfaceWithFormat(0, 640, 480, 32, SDL_PIXELFORMAT_ARGB8888);
+    int width = 0;
+    int height = 0;
+    if (SDL_GetRendererOutputSize(renderer, &width, &height) != 0 || width <= 0 || height <= 0) return false;
+    SDL_Surface* surface = SDL_CreateRGBSurfaceWithFormat(0, width, height, 32, SDL_PIXELFORMAT_ARGB8888);
     if (surface == nullptr) return false;
     const bool success = SDL_RenderReadPixels(renderer, nullptr, SDL_PIXELFORMAT_ARGB8888,
         surface->pixels, surface->pitch) == 0 && SDL_SaveBMP(surface, path.c_str()) == 0;
