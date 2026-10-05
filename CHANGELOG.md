@@ -1,5 +1,15 @@
 # Releases
 
+## v0.1.0-rc.2 — English interface
+
+- Added an English interface. Open Help with Select and press Y to switch
+  languages; the choice is saved for future launches.
+- small minor fixes.
+
+The Knulli packages have been exercised on an RG34XXSP. The muOS package
+remains a hardware-untested candidate. Background game-audio balancing remains
+experimental; see [TODO.md](TODO.md).
+
 ## v0.1.0-rc.1 — first public release candidate
 
 - Knulli package for controller-driven offline MP3 playback; an isolated
