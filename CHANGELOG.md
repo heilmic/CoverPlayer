@@ -1,5 +1,12 @@
 # Releases
 
+## v0.1.0-rc.4 — simpler single-track playback
+
+- Opening a folder with one MP3 now starts or resumes it immediately; folders
+  with multiple tracks still show the track list.
+- Added a muOS-compatible CoverPlayer app icon.
+- Rebuilt the Knulli and muOS packages from the same application source.
+
 ## v0.1.0-rc.3 — muOS hardware support
 
 - CoverPlayer now starts and plays audio on muOS Jacaranda using the device's

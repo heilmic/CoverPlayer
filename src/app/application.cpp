@@ -378,7 +378,8 @@ void Application::handleTracksAcceptOrBack(const platform::InputActions& actions
 void Application::handlePlayerBack(const platform::InputActions& actions) {
     if (actions.back) {
         saveProgress(); if (audioPlayer_ != nullptr && !audioPlayer_->isPaused()) audioPlayer_->togglePause();
-        screen_ = platform::Screen::Tracks;
+        const auto* album = selectedAlbum();
+        screen_ = album != nullptr && album->tracks.size() == 1 ? albumBrowserScreen_ : platform::Screen::Tracks;
     }
 }
 
@@ -406,7 +407,7 @@ void Application::updatePlayback(const platform::InputActions& actions) {
         currentMediaId_ == album->tracks[trackIndex_].path) {
         saveProgress();
         if (trackIndex_ + 1 < album->tracks.size()) { ++trackIndex_; openSelectedTrack(); }
-        else screen_ = platform::Screen::Tracks;
+        else screen_ = album->tracks.size() == 1 ? albumBrowserScreen_ : platform::Screen::Tracks;
     }
     platform_.setPlaybackStatus(audioPlayer_->isOpen() && !audioPlayer_->isFinished(),
         audioPlayer_->isPaused(), audioPlayer_->positionSeconds(), audioPlayer_->durationSeconds());
@@ -498,7 +499,7 @@ const library::Collection* Application::selectedAlbum() const {
 std::vector<library::Collection>* Application::currentNodes(){if(sources_.empty()||sourceIndex_>=sources_.size())return nullptr;auto* nodes=&sources_[sourceIndex_].albums;for(const auto index:navigationPath_){if(index>=nodes->size())return nullptr;nodes=&(*nodes)[index].children;}return nodes;}
 const std::vector<library::Collection>* Application::currentNodes()const{if(sources_.empty()||sourceIndex_>=sources_.size())return nullptr;const auto* nodes=&sources_[sourceIndex_].albums;for(const auto index:navigationPath_){if(index>=nodes->size())return nullptr;nodes=&(*nodes)[index].children;}return nodes;}
 std::string Application::currentContainerName()const{if(sources_.empty()||sourceIndex_>=sources_.size())return t("SAMMLUNG");const auto* nodes=&sources_[sourceIndex_].albums;const library::Collection* container=nullptr;for(const auto index:navigationPath_){if(index>=nodes->size())break;container=&(*nodes)[index];nodes=&container->children;}return container==nullptr?sources_[sourceIndex_].name:container->name;}
-void Application::openSelectedNode(){auto* node=selectedAlbum();if(node==nullptr)return;if(!node->children.empty()){navigationPath_.push_back(albumIndex_);albumIndex_=0;trackIndex_=0;return;}if(node->tracks.empty())return;selectResumeTrack();screen_=platform::Screen::Tracks;}
+void Application::openSelectedNode(){auto* node=selectedAlbum();if(node==nullptr)return;if(!node->children.empty()){navigationPath_.push_back(albumIndex_);albumIndex_=0;trackIndex_=0;return;}if(node->tracks.empty())return;selectResumeTrack();if(node->tracks.size()==1){openSelectedTrack();screen_=platform::Screen::Player;}else screen_=platform::Screen::Tracks;}
 void Application::openSelectedTrack() {
     auto* album = selectedAlbum();
     if (album == nullptr || album->tracks.empty()) return;

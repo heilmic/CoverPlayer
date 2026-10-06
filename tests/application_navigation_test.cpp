@@ -192,13 +192,23 @@ int main() {
     // A one-file audiobook must use exactly the same resume path as a
     // multi-track book. This guards the common long-single-MP3 layout.
     FakePlatform singleResumePlatform;
-    singleResumePlatform.script = {openBook, play, quit};
+    singleResumePlatform.script = {openBook, rootBack, quit};
     FakeAudio singleResumeAudio; SingleTrackProgress singleResumeProgress; SingleTrackCache singleResumeCache; FakeFileSystem singleResumeFileSystem;
     coverplayer::app::Application singleResumeApp(singleResumePlatform, &singleResumeAudio, &singleResumeProgress,
         singleResumeCache, singleResumeFileSystem, "unused", "");
     singleResumeApp.run();
     if (singleResumeAudio.opened != "single.mp3" || singleResumeAudio.positionSeconds() != 88.0) {
         std::cerr << "single-track audiobook did not resume at its saved position\n";
+        return 1;
+    }
+    bool sawSinglePlayer = false;
+    bool sawSingleTracks = false;
+    for (const auto& view : singleResumePlatform.views) {
+        sawSinglePlayer |= view.screen == coverplayer::platform::Screen::Player;
+        sawSingleTracks |= view.screen == coverplayer::platform::Screen::Tracks;
+    }
+    if (!sawSinglePlayer || sawSingleTracks || singleResumePlatform.views.back().screen != coverplayer::platform::Screen::CoverFlow) {
+        std::cerr << "single-track audiobook showed the track list instead of returning to the album browser\n";
         return 1;
     }
 
