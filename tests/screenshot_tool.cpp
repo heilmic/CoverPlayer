@@ -81,7 +81,7 @@ int main(int argc, char** argv) {
     collections.screen = coverplayer::platform::Screen::Collections;
     collections.title = "SAMMLUNGEN";
     collections.items = {
-        "Die drei ???|HOERSPIEL  4 MEDIEN  62% GEHOERT",
+        "Die drei ???|HOERSPIEL  5 MEDIEN  62% GEHOERT",
         "Hoerbuecher|HOERBUCH  18 MEDIEN  31% GEHOERT",
         "Podcasts|PODCAST  12 MEDIEN",
         "Musik|MUSIK  24 MEDIEN"
@@ -101,14 +101,13 @@ int main(int argc, char** argv) {
 
     coverplayer::platform::ViewModel tracks;
     tracks.screen = coverplayer::platform::Screen::Tracks;
-    tracks.title = "240  DIE SCHWARZE ROSE";
-    tracks.coverPath = covers.back();
-    tracks.selected = 5;
+    tracks.title = "239  SIEBEN PALMEN";
+    tracks.coverPath = covers[3];
+    tracks.selected = 4;
     tracks.items = {
-        "Schwarze Post  [FERTIG]", "Aushilfsgaertner gesucht  [FERTIG]",
-        "Der verbotene Ort  [FERTIG]", "Heftige Schlaege  [FERTIG]",
-        "Bewerbungsgespraech  [FERTIG]", "Der braune Umschlag  [8:14]",
-        "Die schwarze Rose"
+        "01  Ankunft auf der Insel  [FERTIG]", "02  Der erste Hinweis  [FERTIG]",
+        "03  Spuren im Sand  [FERTIG]", "04  Die Nachtwache  [FERTIG]",
+        "05  Eine neue Entdeckung  [8:14]", "06  Das Geheimnis"
     };
     if (!render(renderer, tracks, (output / "04-titelliste.bmp").u8string())) return 1;
 
@@ -188,27 +187,31 @@ int main(int argc, char** argv) {
     music.itemImages = musicCovers;
     music.selected = 2;
     if (!render(renderer, music, (output / "10-music-coverflow.bmp").u8string())) return 1;
+    renderer.setPlaybackStatus(true, false, 812.0, 1496.0);
+    renderer.setPlayerDetails(58, 1, {}, 76);
     renderer.setHelpVisible(true);
     if (!render(renderer, player, (output / "11-help-player.bmp").u8string())) return 1;
     if (!render(renderer, collections, (output / "12-help-collections.bmp").u8string())) return 1;
     renderer.setHelpVisible(false);
     coverplayer::platform::ViewModel longTracks;
     longTracks.screen = coverplayer::platform::Screen::Tracks;
-    longTracks.title = "041 - Insel der Haie";
-    longTracks.coverPath = covers.back();
+    longTracks.title = "239 - Sieben Palmen";
+    longTracks.coverPath = covers[3];
     longTracks.selected = 2;
     longTracks.items = {
-        "041 - Insel der Haie (Teil 01) - Eine geheimnisvolle Entdeckung",
-        "041 - Insel der Haie (Teil 02) - Die Spur fuehrt zum Leuchtturm",
-        "041 - Insel der Haie (Teil 03) - Das Versteck unter den Klippen",
-        "041 - Insel der Haie (Teil 04) - Das Raetsel wird geloest"
+        "239 - Sieben Palmen (Teil 01) - Eine geheimnisvolle Entdeckung",
+        "239 - Sieben Palmen (Teil 02) - Die Spur fuehrt zur Villa",
+        "239 - Sieben Palmen (Teil 03) - Das Versteck unter den Palmen",
+        "239 - Sieben Palmen (Teil 04) - Das Raetsel wird geloest"
     };
     if (!render(renderer, longTracks, (output / "13-long-tracks.bmp").u8string())) return 1;
     coverplayer::platform::ViewModel longPlayer;
     longPlayer.screen = coverplayer::platform::Screen::Player;
     longPlayer.title = longTracks.items[longTracks.selected];
-    longPlayer.subtitle = "041 - Insel der Haie  |  TITEL 3/4";
+    longPlayer.subtitle = "239 - Sieben Palmen  |  TITEL 3/4";
     longPlayer.coverPath = longTracks.coverPath;
+    renderer.setPlaybackStatus(true, false, 843.0, 1860.0);
+    renderer.setPlayerDetails(45, 3, {}, 76);
     if (!render(renderer, longPlayer, (output / "14-long-player.bmp").u8string())) return 1;
     return 0;
 }

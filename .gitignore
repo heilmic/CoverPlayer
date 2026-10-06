@@ -3,3 +3,4 @@ out/
 .cache/
 CMakeUserPresets.json
 docs/screenshots/source-covers/
+scripts/deploy.local.json

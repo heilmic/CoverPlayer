@@ -67,6 +67,10 @@ A safer solution is tracked in [TODO.md](TODO.md).
 | --- | --- | --- |
 | ![Audiobooks](docs/screenshots/generated/07-drei-fragezeichen-kids.png) | ![Podcasts](docs/screenshots/generated/08-checkpod.png) | ![Music](docs/screenshots/generated/10-music-coverflow.png) |
 
+| Multi-track titles | Long title while playing |
+| --- | --- |
+| ![Multi-track titles](docs/screenshots/generated/13-long-tracks.png) | ![Long title while playing](docs/screenshots/generated/14-long-player.png) |
+
 These are illustrative images rendered by the actual interface with example
 library entries, not a media library supplied with the app. Downloaded
 full-resolution cover files are not in this repository or the packages. Cover
@@ -91,6 +95,29 @@ Desktop. Pass `-Mp3Path <file>` to include the optional real-file seek test.
 This does not install anything on a handheld. See the
 [package notes](packaging/README.md) for installation details. Future
 Switch/PortMaster ports remain open work.
+
+The repeatable Windows workflows are:
+
+```powershell
+./scripts/Build-And-Test.ps1
+./scripts/Generate-DemoScreenshots.ps1
+./scripts/Deploy-Knulli.ps1 -IncludeTest
+./scripts/Deploy-muOS.ps1
+./scripts/Publish-Release.ps1 -Tag v0.1.0-rc.4 -DryRun
+```
+
+The screenshot command uses locally supplied cover files in
+`docs/screenshots/source-covers`; those source files are ignored by Git. Copy
+`scripts/deploy.example.json` to `scripts/deploy.local.json` and enter your
+device addresses and optional SSH host-key fingerprints. This local file is
+also ignored by Git. The deployment commands prompt for SSH passwords, refuse
+a running player, and verify uploaded package hashes. Add `-Build` to run tests
+and rebuild before deployment, or `-PreflightOnly` to validate packages
+without contacting a device. Knulli targets the configured handhelds by
+default. For an actual
+GitHub release, add its section to `CHANGELOG.md`, commit the changes, and run
+`Publish-Release.ps1` with the new tag and without `-DryRun`; it builds, tests,
+verifies, tags, and uploads the three packages. Existing tags are not replaced.
 
 CoverPlayer is licensed under [Apache-2.0](LICENSE). Bundled dependencies and
 their notices are listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
