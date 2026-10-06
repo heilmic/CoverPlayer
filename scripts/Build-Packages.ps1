@@ -40,7 +40,7 @@ $muosApp = Join-Path $stagingRoot 'muos/CoverPlayer'
 Copy-AppPayload $muosApp
 Copy-Item -LiteralPath "$repositoryRoot/packaging/muos/mux_launch.sh" -Destination "$muosApp/mux_launch.sh"
 New-Item -ItemType Directory -Force -Path "$muosApp/glyph" | Out-Null
-Copy-Item -LiteralPath "$repositoryRoot/packaging/muos/glyph/coverplayer.svg" -Destination "$muosApp/glyph/coverplayer.svg"
+Copy-Item -LiteralPath "$repositoryRoot/packaging/muos/glyph/coverplayer.png" -Destination "$muosApp/glyph/coverplayer.png"
 
 function Invoke-RuntimeCollection([string]$destination, [string]$licenseDestination, [string]$extraExcluded) {
     $previousErrorActionPreference = $ErrorActionPreference
