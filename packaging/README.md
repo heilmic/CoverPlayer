@@ -31,11 +31,11 @@ deleting those files or any media directory.
   Up/Down select the previous or next track.
 - On the player, a short START release cycles the sleep timer. Holding START
   for two seconds exits the interface and keeps a playing album running in
-  the background on Knulli. START+SELECT exits immediately.
+  the background on Knulli or muOS. START+SELECT exits immediately.
 
-The background playback helper on Knulli can continue while other software
-is open. A game launched afterward may need its own volume lowered in
-RetroArch. Reopening CoverPlayer takes playback back into the interface.
+The background playback helper on Knulli and muOS can continue while other
+software is open. A game launched afterward may need its own volume lowered
+in RetroArch. Reopening CoverPlayer takes playback back into the interface.
 
 Bluetooth management on Knulli lists already paired devices. Pair new
 headphones in Knulli's system menu first. Bluetooth management is currently
@@ -44,6 +44,7 @@ unavailable on muOS.
 ## Troubleshooting
 
 Knulli writes the app log to `/userdata/system/logs/coverplayer.log`.
+muOS writes it to `MUOS/log/coverplayer.log` on the application storage card.
 Keep the media files and saved application data when replacing a package.
 
 CoverPlayer is licensed under Apache-2.0; see `LICENSE`. Bundled third-party

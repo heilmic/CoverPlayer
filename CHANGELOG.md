@@ -1,5 +1,23 @@
 # Releases
 
+## v0.1.0-rc.3 — muOS hardware support
+
+- CoverPlayer now starts and plays audio on muOS Jacaranda using the device's
+  SDL2 and ALSA/PipeWire libraries. Volume display and controls follow the
+  muOS system volume.
+- The current handheld layout, covers, help, normal playback, and background
+  playback have been tested on a muOS handheld.
+- The sleep timer has also been confirmed to end playback cleanly on muOS.
+- Track lists now give filenames the full screen width; Now Playing keeps its
+  large cover while wrapping long track names on both 640px and 720px screens.
+  These final layout changes still need a device check.
+- Knulli and muOS packages are built from the same application source.
+  Bluetooth management remains Knulli-only. The Knulli packages were rebuilt
+  and passed automated tests, but were not retested on hardware for this RC.
+- Package manifests now use Unix line endings so they can be checked directly
+  on handhelds with `sha256sum -c`.
+- The muOS launcher uses the system's SD1/SD2-aware application and save paths.
+
 ## v0.1.0-rc.2 — English interface
 
 - Added an English interface. Open Help with Select and press Y to switch

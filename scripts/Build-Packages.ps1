@@ -50,12 +50,17 @@ function Invoke-RuntimeCollection([string]$destination, [string]$licenseDestinat
     if ($dockerRunExitCode -ne 0) { throw 'ARM64 runtime collection failed.' }
 }
 
-# muOS gets the full, untested-elsewhere transitive closure exactly as
-# before - unlike Knulli, there is no hardware-matched system SDL2/ALSA
-# known to already be present there, so nothing is assumed about what it
-# can resolve on its own.
-Invoke-RuntimeCollection '/work/build/staging/runtime-muos' '/work/build/staging/muos/CoverPlayer/licenses' ''
+# muOS provides its own framebuffer-capable SDL2 and ALSA/PipeWire stack.
+# Debian's SDL2 requires /dev/dri; Debian's libasound searches for the
+# PipeWire module in /usr/lib/aarch64-linux-gnu/alsa-lib instead of muOS's
+# /usr/lib/alsa-lib, so neither library can be bundled on muOS.
+Invoke-RuntimeCollection '/work/build/staging/runtime-muos' '/work/build/staging/muos/CoverPlayer/licenses' 'libSDL2-2.0.so.0 libSDL2_image-2.0.so.0 libSDL2_ttf-2.0.so.0 libasound.so.2'
 Copy-Item -Path "$stagingRoot/runtime-muos/*" -Destination "$muosApp/libs"
+foreach ($name in @('libSDL2-2.0.so.0','libSDL2_image-2.0.so.0','libSDL2_ttf-2.0.so.0','libasound.so.2')) {
+    if (Test-Path -LiteralPath (Join-Path "$muosApp/libs" $name)) {
+        throw "muOS package must use the system library: $name"
+    }
+}
 
 # Knulli ships its own hardware-specific SDL2 build for its framebuffer
 # stack - the generic Debian SDL2 only knows DRM/X11/Wayland and fails on
@@ -85,7 +90,9 @@ function Write-Manifest([string]$root) {
             $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $_.FullName).Hash.ToLowerInvariant()
             "$hash  $relative"
         }
-    [IO.File]::WriteAllLines($manifest, $lines, [Text.UTF8Encoding]::new($false))
+    # sha256sum -c on Linux treats CRLF's carriage return as part of each
+    # filename, so manifests must use Unix line endings even when built here.
+    [IO.File]::WriteAllText($manifest, (($lines -join "`n") + "`n"), [Text.UTF8Encoding]::new($false))
 }
 
 Write-Manifest $knulliApp

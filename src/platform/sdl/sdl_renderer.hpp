@@ -47,6 +47,7 @@ private:
         std::size_t visibleRows;
         int maxCharacters;
         bool twoLine;
+        bool middleEllipsis = false;
     };
 
     void renderHandheldUi();
@@ -56,6 +57,8 @@ private:
     void drawPerspectiveCover(SDL_Texture* texture, float offset, Uint8 brightness, Uint8 alpha, bool reflection);
     void drawPlaybackSymbol(int centerX, int centerY, bool paused);
     void drawFittedText(const std::string& text, int x, int y, int maxCharacters, SDL_Color color, TTF_Font* font = nullptr);
+    int drawWrappedText(const std::string& text, int x, int y, int width, int lineHeight, int maxLines, SDL_Color color, TTF_Font* font = nullptr);
+    [[nodiscard]] int textCapacity(int width, TTF_Font* font = nullptr) const;
     void drawText(const char* text, int x, int y, SDL_Color color, TTF_Font* font = nullptr);
     void drawSelectableList(const std::vector<std::string>& items, std::size_t selected, const ListLayout& layout);
     void drawBluetoothIcon(int x, int y);

@@ -1,6 +1,7 @@
 #include "platform/sdl/linux_audio_system.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <iostream>
@@ -62,6 +63,14 @@ std::optional<int> firstPercent(const std::string& output) {
     return std::clamp(std::stoi(output.substr(start, percent - start)), 0, 100);
 }
 
+std::optional<int> wpctlPercent(const std::string& output) {
+    std::istringstream stream(output);
+    std::string label;
+    double fraction = 0.0;
+    if (!(stream >> label >> fraction) || label != "Volume:" || !std::isfinite(fraction)) return std::nullopt;
+    return static_cast<int>(std::lround(std::clamp(fraction, 0.0, 1.0) * 100.0));
+}
+
 bool validSinkName(const std::string& sink) {
     static const std::regex pattern("^[A-Za-z0-9_.:-]+$");
     return !sink.empty() && std::regex_match(sink, pattern);
@@ -111,7 +120,13 @@ bool applyAudioOutputState(const std::string& sink, const AudioOutputState& stat
 } // namespace
 
 LinuxAudioSystem::LinuxAudioSystem() {
-    systemVolumeEnabled_ = std::getenv("COVERPLAYER_SYSTEM_VOLUME") != nullptr;
+    if (const char* backend = std::getenv("COVERPLAYER_VOLUME_BACKEND");
+        backend != nullptr && std::string(backend) == "wpctl") {
+        volumeBackend_ = VolumeBackend::Wpctl;
+    } else if (std::getenv("COVERPLAYER_SYSTEM_VOLUME") != nullptr) {
+        volumeBackend_ = VolumeBackend::Pactl;
+    }
+    systemVolumeEnabled_ = volumeBackend_ != VolumeBackend::None;
     bluetoothEnabled_ = std::getenv("COVERPLAYER_BLUETOOTH") != nullptr;
     if (const char* initialVolume = std::getenv("COVERPLAYER_INITIAL_VOLUME")) {
         char* end = nullptr;
@@ -127,8 +142,13 @@ std::optional<int> LinuxAudioSystem::adjustSystemVolume(int deltaPercent) {
     if (!systemVolumePercent_) refreshSystemVolume();
     if (!systemVolumePercent_) return std::nullopt;
     const int target = std::clamp(*systemVolumePercent_ + deltaPercent, 0, 100);
-    const std::string volumeCommand = "/usr/bin/pactl set-sink-volume @DEFAULT_SINK@ " + std::to_string(target) + "% >/dev/null 2>&1";
-    const std::string muteCommand = std::string("/usr/bin/pactl set-sink-mute @DEFAULT_SINK@ ") + (target == 0 ? "1" : "0") + " >/dev/null 2>&1";
+    const bool useWpctl = volumeBackend_ == VolumeBackend::Wpctl;
+    const std::string volumeCommand = useWpctl
+        ? "/usr/bin/wpctl set-volume @DEFAULT_AUDIO_SINK@ " + std::to_string(target) + "% >/dev/null 2>&1"
+        : "/usr/bin/pactl set-sink-volume @DEFAULT_SINK@ " + std::to_string(target) + "% >/dev/null 2>&1";
+    const std::string muteCommand = (useWpctl
+        ? "/usr/bin/wpctl set-mute @DEFAULT_AUDIO_SINK@ "
+        : "/usr/bin/pactl set-sink-mute @DEFAULT_SINK@ ") + std::string(target == 0 ? "1" : "0") + " >/dev/null 2>&1";
     if (std::system(volumeCommand.c_str()) == 0 && std::system(muteCommand.c_str()) == 0) {
         systemVolumePercent_ = target;
         systemVolumeMuted_ = target == 0;
@@ -139,6 +159,14 @@ std::optional<int> LinuxAudioSystem::adjustSystemVolume(int deltaPercent) {
 
 void LinuxAudioSystem::refreshSystemVolume() {
     volumeRefreshAt_ = SDL_GetTicks();
+    if (volumeBackend_ == VolumeBackend::Wpctl) {
+        const auto output = runCommand("LC_ALL=C /usr/bin/wpctl get-volume @DEFAULT_AUDIO_SINK@");
+        const auto volume = wpctlPercent(output);
+        if (!volume) return;
+        systemVolumeMuted_ = output.find("[MUTED]") != std::string::npos;
+        systemVolumePercent_ = systemVolumeMuted_ ? 0 : *volume;
+        return;
+    }
     // The display only needs the active output's volume and mute state.
     // Requiring get-default-sink as well can leave it stuck at the launcher's
     // initial value when that separate lookup briefly fails on Knulli. Force

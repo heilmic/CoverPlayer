@@ -4,8 +4,8 @@
 
 CoverPlayer is an offline audio player made for handheld game systems. It puts
 your audiobooks, radio plays, podcasts, and music in a cover-first library you
-can navigate with a controller. Knulli is the primary target; a muOS package is
-also available as a release candidate.
+can navigate with a controller. Knulli is the primary target; muOS support has
+also been tested on a handheld.
 
 [Download a release](https://github.com/heilmic/CoverPlayer/releases) ·
 [Release notes](CHANGELOG.md) ·
@@ -24,7 +24,7 @@ also available as a release candidate.
   bookmarks, and set a sleep timer.
 - Scan collections again when files change. A library cache keeps ordinary
   starts quick.
-- On Knulli, continue playing an active track in the background while using
+- On Knulli and muOS, continue playing an active track in the background while using
   other apps, then reopen CoverPlayer to take playback back.
 
 ## Library and playback
@@ -43,16 +43,15 @@ German and English; the choice is saved for the next launch.
 
 ## Background playback and Bluetooth
 
-On Knulli, hold **Start** for two seconds while a track is playing to leave
+On Knulli or muOS, hold **Start** for two seconds while a track is playing to leave
 the app with playback running. A short press of Start changes the sleep timer;
 **Start + Select** exits without background playback. Reopening CoverPlayer
 returns playback to the app. Bluetooth management is available for devices
 already paired through Knulli's system menu.
 
-Game-audio balancing during background playback is still experimental: audio
-that starts later may not be lowered, and current cleanup does not restore
-every stream's previous level exactly. If needed, lower game audio in
-RetroArch. A safer solution is tracked in [TODO.md](TODO.md).
+Game-audio balancing during background playback is still experimental on
+Knulli and is not enabled on muOS. If needed, lower game audio in RetroArch.
+A safer solution is tracked in [TODO.md](TODO.md).
 
 ## Screenshots
 
@@ -90,8 +89,8 @@ On Windows, `./scripts/Build-And-Test.ps1` runs the desktop tests and builds
 the Knulli and muOS archives. It needs MSYS2 UCRT64, Python, and Docker
 Desktop. Pass `-Mp3Path <file>` to include the optional real-file seek test.
 This does not install anything on a handheld. See the
-[package notes](packaging/README.md) for installation details. muOS hardware
-validation and future Switch/PortMaster ports remain open work.
+[package notes](packaging/README.md) for installation details. Future
+Switch/PortMaster ports remain open work.
 
 CoverPlayer is licensed under [Apache-2.0](LICENSE). Bundled dependencies and
 their notices are listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

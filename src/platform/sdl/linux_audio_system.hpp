@@ -10,7 +10,7 @@
 namespace coverplayer::platform {
 
 // Owns every Linux system-volume and Bluetooth shell integration
-// (pactl/bluetoothctl/knulli-bluetooth). No SDL rendering or input code
+// (pactl/wpctl/bluetoothctl/knulli-bluetooth). No SDL rendering or input code
 // depends on this class, and this class never touches a window or renderer.
 class LinuxAudioSystem {
 public:
@@ -32,9 +32,11 @@ public:
     void tick();
 
 private:
+    enum class VolumeBackend { None, Pactl, Wpctl };
     void refreshSystemVolume();
     void refreshBluetoothAudioStatus();
 
+    VolumeBackend volumeBackend_ = VolumeBackend::None;
     bool systemVolumeEnabled_ = false;
     bool bluetoothEnabled_ = false;
     std::optional<int> systemVolumePercent_;

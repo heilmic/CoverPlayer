@@ -191,5 +191,24 @@ int main(int argc, char** argv) {
     renderer.setHelpVisible(true);
     if (!render(renderer, player, (output / "11-help-player.bmp").u8string())) return 1;
     if (!render(renderer, collections, (output / "12-help-collections.bmp").u8string())) return 1;
+    renderer.setHelpVisible(false);
+    coverplayer::platform::ViewModel longTracks;
+    longTracks.screen = coverplayer::platform::Screen::Tracks;
+    longTracks.title = "041 - Insel der Haie";
+    longTracks.coverPath = covers.back();
+    longTracks.selected = 2;
+    longTracks.items = {
+        "041 - Insel der Haie (Teil 01) - Eine geheimnisvolle Entdeckung",
+        "041 - Insel der Haie (Teil 02) - Die Spur fuehrt zum Leuchtturm",
+        "041 - Insel der Haie (Teil 03) - Das Versteck unter den Klippen",
+        "041 - Insel der Haie (Teil 04) - Das Raetsel wird geloest"
+    };
+    if (!render(renderer, longTracks, (output / "13-long-tracks.bmp").u8string())) return 1;
+    coverplayer::platform::ViewModel longPlayer;
+    longPlayer.screen = coverplayer::platform::Screen::Player;
+    longPlayer.title = longTracks.items[longTracks.selected];
+    longPlayer.subtitle = "041 - Insel der Haie  |  TITEL 3/4";
+    longPlayer.coverPath = longTracks.coverPath;
+    if (!render(renderer, longPlayer, (output / "14-long-player.bmp").u8string())) return 1;
     return 0;
 }

@@ -276,6 +276,43 @@ void SdlRenderer::drawFittedText(const std::string& text, int x, int y, int maxC
     drawText(fitted.c_str(), x, y, color, font);
 }
 
+int SdlRenderer::textCapacity(int width, TTF_Font* font) const {
+    int glyphWidth = 0;
+    int glyphHeight = 0;
+    TTF_SizeUTF8(font != nullptr ? font : font_, "M", &glyphWidth, &glyphHeight);
+    return std::max(1, width / std::max(1, glyphWidth));
+}
+
+int SdlRenderer::drawWrappedText(const std::string& text, int x, int y, int width, int lineHeight, int maxLines, SDL_Color color, TTF_Font* font) {
+    const int capacity = textCapacity(width, font);
+    std::string remainder = text;
+    for (int line = 0; line < maxLines; ++line) {
+        if (static_cast<int>(utf8Length(remainder)) <= capacity) {
+            drawText(remainder.c_str(), x, y + line * lineHeight, color, font);
+            return line + 1;
+        }
+        if (line == maxLines - 1) {
+            if (capacity > 6) {
+                // Keep the end of long filenames: it often distinguishes
+                // audiobook parts whose opening words are identical.
+                const std::size_t tailStart = utf8ByteOffsetOfCodepoint(remainder, utf8Length(remainder) - static_cast<std::size_t>(capacity - 3));
+                remainder = "..." + remainder.substr(tailStart);
+            }
+            drawFittedText(remainder, x, y + line * lineHeight, capacity, color, font);
+            return line + 1;
+        }
+        std::size_t split = utf8ByteOffsetOfCodepoint(remainder, static_cast<std::size_t>(capacity));
+        const std::size_t wordBreak = remainder.rfind(' ', split);
+        if (wordBreak != std::string::npos && wordBreak >= utf8ByteOffsetOfCodepoint(remainder, static_cast<std::size_t>(capacity / 2))) {
+            split = wordBreak;
+        }
+        drawText(remainder.substr(0, split).c_str(), x, y + line * lineHeight, color, font);
+        remainder.erase(0, split);
+        remainder.erase(0, remainder.find_first_not_of(' '));
+    }
+    return maxLines;
+}
+
 void SdlRenderer::drawCover(int x, int y, int width, int height) {
     drawCoverTexture(coverTexture_, x, y, width, height);
 }
@@ -478,6 +515,12 @@ void SdlRenderer::drawSelectableList(const std::vector<std::string>& items, std:
             name = items[index].substr(0, separator);
             detail = separator == std::string::npos ? std::string{} : items[index].substr(separator + 1);
         }
+        if (layout.middleEllipsis && static_cast<int>(utf8Length(name)) > layout.maxCharacters && layout.maxCharacters > 8) {
+            const std::size_t headCount = static_cast<std::size_t>((layout.maxCharacters - 3) * 2 / 3);
+            const std::size_t tailCount = static_cast<std::size_t>(layout.maxCharacters - 3) - headCount;
+            name = name.substr(0, utf8ByteOffsetOfCodepoint(name, headCount)) + "..." +
+                name.substr(utf8ByteOffsetOfCodepoint(name, utf8Length(name) - tailCount));
+        }
         drawFittedText(name, layout.x + 16, y, layout.maxCharacters, primaryColor);
         if (layout.twoLine && !detail.empty()) {
             drawFittedText(detail, layout.x + 16, y + 20, layout.maxCharacters, SDL_Color{125, 137, 154, 255});
@@ -559,12 +602,23 @@ void SdlRenderer::renderHandheldUi() {
     if(view_.screen==Screen::CoverFlow){
         renderCoverFlow();
     } else if(view_.screen==Screen::Player){
+        // Keep the cover prominent and wrap the track details within the
+        // remaining width, including on the narrower 640px handheld.
         drawCover(25,100,225,225);
-        drawFittedText(view_.title,275,100,26+extraWidth/16,SDL_Color{244,247,251,255},titleFont_);
-        drawFittedText(view_.subtitle,275,148,31+extraWidth/11,SDL_Color{143,154,170,255});
-        drawText((std::string(tr(language_,"LESEZEICHEN"))+"  "+std::to_string(bookmarkCount_)).c_str(),275,181,SDL_Color{143,154,170,255});
-        if(!notice_.empty())drawFittedText(notice_,275,225,31+extraWidth/11,SDL_Color{242,190,92,255});
-        if(!view_.message.empty())drawFittedText(view_.message,275,270,31+extraWidth/11,SDL_Color{242,118,109,255});
+        const int detailX=275, detailWidth=uiWidth_-detailX-24;
+        // Switch sooner than the raw three-line capacity: breaking on words
+        // can otherwise elide an important word even when the character
+        // count alone suggests it should fit.
+        TTF_Font* trackFont=utf8Length(view_.title)>static_cast<std::size_t>(2*textCapacity(detailWidth,titleFont_))?font_:titleFont_;
+        const int titleLineHeight=trackFont==titleFont_?32:25;
+        const int titleLines=drawWrappedText(view_.title,detailX,100,detailWidth,titleLineHeight,3,SDL_Color{244,247,251,255},trackFont);
+        const int subtitleY=100+titleLines*titleLineHeight+12;
+        const int subtitleLines=drawWrappedText(view_.subtitle,detailX,subtitleY,detailWidth,24,2,SDL_Color{143,154,170,255});
+        const int bookmarkY=subtitleY+subtitleLines*24+8;
+        drawText((std::string(tr(language_,"LESEZEICHEN"))+"  "+std::to_string(bookmarkCount_)).c_str(),detailX,bookmarkY,SDL_Color{143,154,170,255});
+        const int statusY=bookmarkY+28;
+        if(!view_.message.empty())drawFittedText(view_.message,detailX,statusY,textCapacity(detailWidth),SDL_Color{242,118,109,255});
+        else if(!notice_.empty())drawFittedText(notice_,detailX,statusY,textCapacity(detailWidth),SDL_Color{242,190,92,255});
 
         // The rail is a clean, uninterrupted bar; the play/pause symbol gets
         // its own row below it instead of sitting on top of the rail, with
@@ -605,6 +659,18 @@ void SdlRenderer::renderHandheldUi() {
             drawFittedText(key,x+(key.size()>1?3:(cellWidth-19)/2),y+4,6,index==view_.selected?SDL_Color{244,247,251,255}:SDL_Color{158,168,184,255});
         }
         if(!view_.message.empty())drawFittedText(view_.message,24,401,65+extraWidth/11,SDL_Color{242,190,92,255});
+    } else if(view_.screen==Screen::Tracks) {
+        // Keep the album artwork as context, then give every track the full
+        // 640/720px list width. The selected filename is also shown above
+        // the list on two lines so similar long names remain distinguishable.
+        if(!view_.coverPath.empty()) drawCover(25,88,84,84);
+        const int headingX=view_.coverPath.empty()?24:130;
+        drawFittedText(view_.title,headingX,88,textCapacity(uiWidth_-headingX-24,titleFont_),SDL_Color{244,247,251,255},titleFont_);
+        if(view_.selected<view_.items.size()) {
+            drawWrappedText(view_.items[view_.selected],headingX,128,uiWidth_-headingX-24,24,2,SDL_Color{203,210,220,255});
+        }
+        drawSelectableList(view_.items,view_.selected,{24,uiWidth_-48,31,199,7,textCapacity(uiWidth_-80),false,true});
+        if(!view_.message.empty())drawFittedText(view_.message,headingX,174,textCapacity(uiWidth_-headingX-24),SDL_Color{143,154,170,255});
     } else {
         const bool hasCover=!view_.coverPath.empty();const int listX=hasCover?272:24;const int listWidth=hasCover?uiWidth_-294:uiWidth_-48;const int maxCharacters=(hasCover?20:37)+extraWidth/11;
         if(hasCover) drawCover(25,100,225,225);
