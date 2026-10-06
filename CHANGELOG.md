@@ -10,7 +10,6 @@
 - The sleep timer has also been confirmed to end playback cleanly on muOS.
 - Track lists now give filenames the full screen width; Now Playing keeps its
   large cover while wrapping long track names on both 640px and 720px screens.
-  These final layout changes still need a device check.
 - Knulli and muOS packages are built from the same application source.
   Bluetooth management remains Knulli-only. The Knulli packages were rebuilt
   and passed automated tests, but were not retested on hardware for this RC.

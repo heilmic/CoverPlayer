@@ -1,7 +1,7 @@
 #!/bin/sh
 # HELP: CoverPlayer
 # GRID: CoverPlayer
-# ICON: CoverPlayer
+# ICON: coverplayer
 
 . /opt/muos/script/var/func.sh
 
