@@ -56,6 +56,13 @@ if(BUILD_TESTING AND COVERPLAYER_BUILD_TESTS)
     target_include_directories(coverplayer_sdl_input_test PRIVATE include src)
     target_link_libraries(coverplayer_sdl_input_test PRIVATE PkgConfig::SDL2)
     add_test(NAME sdl_input COMMAND coverplayer_sdl_input_test)
+    add_executable(coverplayer_background_session_test
+        tests/linux_background_session_test.cpp
+        src/platform/sdl/linux_background_session.cpp
+    )
+    target_include_directories(coverplayer_background_session_test PRIVATE include src)
+    target_link_libraries(coverplayer_background_session_test PRIVATE PkgConfig::SDL2)
+    add_test(NAME background_session COMMAND coverplayer_background_session_test)
     add_executable(coverplayer_player_seek_test
         tests/mpg123_player_seek_test.cpp
         src/audio/mpg123_sdl_player.cpp

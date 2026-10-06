@@ -59,6 +59,10 @@ public:
     // above always see the track actually playing right now.
     static void recordRunning(const std::string& mediaPath);
 
+    // A stale lock can name a PID since reused by an unrelated process.
+    // Only signal it when /proc/<pid>/cmdline identifies our audio helper.
+    static bool isBackgroundHelperCommandLine(const std::string& commandLine);
+
     // Lowers every other PulseAudio stream (a game, EmulationStation itself,
     // anything not this binary) to COVERPLAYER_DUCK_PERCENT of its current
     // level (default 50), ramped over ~700ms rather than jumped, so a

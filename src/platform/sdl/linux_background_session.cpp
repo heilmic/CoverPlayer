@@ -68,6 +68,17 @@ bool processAlive(long pid) {
     return pid > 0 && (::kill(static_cast<pid_t>(pid), 0) == 0 || errno == EPERM);
 }
 
+std::string readCommandLine(long pid) {
+    std::ifstream input("/proc/" + std::to_string(pid) + "/cmdline", std::ios::binary);
+    std::ostringstream content;
+    content << input.rdbuf();
+    return content.str();
+}
+
+bool isRunningHelper(long pid) {
+    return processAlive(pid) && LinuxBackgroundSession::isBackgroundHelperCommandLine(readCommandLine(pid));
+}
+
 std::string runCommand(const std::string& command) {
     FILE* pipe = popen((command + " 2>/dev/null").c_str(), "r");
     if (pipe == nullptr) return {};
@@ -157,7 +168,7 @@ std::optional<std::string> stopIfRunning(const std::string& lockFilePath) {
     const auto existing = readLockState(lockFilePath);
     std::error_code removeError;
     std::filesystem::remove(std::filesystem::u8path(lockFilePath), removeError);
-    if (!existing || !processAlive(existing->pid)) return std::nullopt;
+    if (!existing || !isRunningHelper(existing->pid)) return std::nullopt;
     // SIGKILL, not SIGTERM: it cannot be caught, blocked, or ignored by the
     // target for any reason, so this is guaranteed to actually end the
     // helper rather than merely asking it to - the helper has nothing to
@@ -252,6 +263,15 @@ void LinuxBackgroundSession::recordRunning(const std::string& mediaPath) {
 #else
     static_cast<void>(mediaPath);
 #endif
+}
+
+bool LinuxBackgroundSession::isBackgroundHelperCommandLine(const std::string& commandLine) {
+    const auto firstEnd = commandLine.find('\0');
+    if (firstEnd == std::string::npos) return false;
+    const auto secondEnd = commandLine.find('\0', firstEnd + 1);
+    if (secondEnd == std::string::npos) return false;
+    return commandLine.compare(0, firstEnd, "coverplayer") == 0 &&
+        commandLine.compare(firstEnd + 1, secondEnd - firstEnd - 1, "--background-audio") == 0;
 }
 
 void LinuxBackgroundSession::duckOtherAudio(const std::function<void()>& onTick) {
