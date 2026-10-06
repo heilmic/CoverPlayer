@@ -1,7 +1,9 @@
 [CmdletBinding()]
 param(
     [string]$CoverSource,
-    [string]$OutputDirectory
+    [string]$OutputDirectory,
+    [ValidateSet('de', 'en')]
+    [string]$Language = 'de'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -11,6 +13,7 @@ if ([string]::IsNullOrWhiteSpace($CoverSource)) {
 }
 if ([string]::IsNullOrWhiteSpace($OutputDirectory)) {
     $OutputDirectory = Join-Path $repositoryRoot 'docs/screenshots/generated'
+    if ($Language -eq 'en') { $OutputDirectory = Join-Path $OutputDirectory 'en' }
 }
 
 $requiredCovers = @(
@@ -39,11 +42,11 @@ try {
     Pop-Location
 }
 
-$rawDirectory = Join-Path $repositoryRoot 'build/screenshots/demo-raw'
+$rawDirectory = Join-Path $repositoryRoot "build/screenshots/demo-raw-$Language"
 $toolDirectory = Join-Path $repositoryRoot 'build/desktop-debug'
 $tool = Join-Path $toolDirectory 'coverplayer_screenshot_tool.exe'
 New-Item -ItemType Directory -Force -Path $rawDirectory, $OutputDirectory | Out-Null
-$renderProcess = Start-Process -FilePath $tool -ArgumentList @($rawDirectory, $CoverSource, 'de') `
+$renderProcess = Start-Process -FilePath $tool -ArgumentList @(('"{0}"' -f $rawDirectory), ('"{0}"' -f $CoverSource), $Language) `
     -WorkingDirectory $toolDirectory -Wait -PassThru -WindowStyle Hidden
 if ($renderProcess.ExitCode -ne 0) { throw "Demo rendering failed with exit code $($renderProcess.ExitCode)." }
 

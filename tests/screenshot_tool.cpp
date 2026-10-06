@@ -52,26 +52,30 @@ int main(int argc, char** argv) {
 
     SDL_SetHint(SDL_HINT_RENDER_DRIVER, "software");
     coverplayer::platform::SdlRenderer renderer;
+    const bool english = argc == 4 && std::string(argv[3]) == "en";
     if (argc == 4) renderer.setLanguage(coverplayer::languageFromCode(argv[3]));
+    const auto demo = [english](const char* de, const char* en) {
+        return std::string(english ? en : de);
+    };
     renderer.setBluetoothStatus(true, true);
     renderer.setPlayerDetails(64, 2, {}, 78);
 
     const std::vector<std::string> covers{
-        (source / "236.png").u8string(), (source / "237.png").u8string(),
-        (source / "238.png").u8string(), (source / "239.png").u8string(),
-        (source / "240.png").u8string()
+        (source / (english ? "hp-1.jpg" : "236.png")).u8string(), (source / (english ? "hp-2.jpg" : "237.png")).u8string(),
+        (source / (english ? "hp-3.jpg" : "238.png")).u8string(), (source / (english ? "hp-4.jpg" : "239.png")).u8string(),
+        (source / (english ? "hp-5.jpg" : "240.png")).u8string()
     };
     const std::vector<std::string> episodes{
-        "236  Im Bann des Barrakudas|6 TITEL  7% GEHOERT",
-        "237  Der rote Bueffel|1 TITEL  100% GEHOERT",
-        "238  Falsche Schuld|7 TITEL  42% GEHOERT",
-        "239  Sieben Palmen|6 TITEL  18% GEHOERT",
-        "240  Die schwarze Rose|1 TITEL  88% GEHOERT"
+        demo("236  Im Bann des Barrakudas|6 TITEL  7% GEHOERT", "Philosopher's Stone|17 CHAPTERS  7% LISTENED"),
+        demo("237  Der rote Bueffel|1 TITEL  100% GEHOERT", "Chamber of Secrets|18 CHAPTERS  100% LISTENED"),
+        demo("238  Falsche Schuld|7 TITEL  42% GEHOERT", "Prisoner of Azkaban|22 CHAPTERS  42% LISTENED"),
+        demo("239  Sieben Palmen|6 TITEL  18% GEHOERT", "Goblet of Fire|37 CHAPTERS  18% LISTENED"),
+        demo("240  Die schwarze Rose|1 TITEL  88% GEHOERT", "Order of the Phoenix|38 CHAPTERS  88% LISTENED")
     };
 
     coverplayer::platform::ViewModel flow;
     flow.screen = coverplayer::platform::Screen::CoverFlow;
-    flow.title = "DIE DREI ???";
+    flow.title = demo("DIE DREI ???", "HARRY POTTER AUDIOBOOKS");
     flow.items = episodes;
     flow.itemImages = covers;
     flow.selected = 2;
@@ -79,12 +83,12 @@ int main(int argc, char** argv) {
 
     coverplayer::platform::ViewModel collections;
     collections.screen = coverplayer::platform::Screen::Collections;
-    collections.title = "SAMMLUNGEN";
+    collections.title = demo("SAMMLUNGEN", "COLLECTIONS");
     collections.items = {
-        "Die drei ???|HOERSPIEL  5 MEDIEN  62% GEHOERT",
-        "Hoerbuecher|HOERBUCH  18 MEDIEN  31% GEHOERT",
-        "Podcasts|PODCAST  12 MEDIEN",
-        "Musik|MUSIK  24 MEDIEN"
+        demo("Die drei ???|HOERSPIEL  5 MEDIEN  62% GEHOERT", "Harry Potter|AUDIOBOOK  5 ALBUMS  62% LISTENED"),
+        demo("Hoerbuecher|HOERBUCH  18 MEDIEN  31% GEHOERT", "Audiobooks|AUDIOBOOK  18 ALBUMS  31% LISTENED"),
+        demo("Podcasts|PODCAST  12 MEDIEN", "Podcasts|PODCAST  12 ALBUMS"),
+        demo("Musik|MUSIK  24 MEDIEN", "Music|MUSIC  24 ALBUMS")
     };
     collections.itemImages = {covers[1], covers[2], covers[3], covers[4]};
     collections.coverPath = covers[1];
@@ -92,7 +96,7 @@ int main(int argc, char** argv) {
 
     coverplayer::platform::ViewModel list;
     list.screen = coverplayer::platform::Screen::AlbumList;
-    list.title = "DIE DREI ???";
+    list.title = demo("DIE DREI ???", "HARRY POTTER AUDIOBOOKS");
     list.items = {episodes[1], episodes[2], episodes[3], episodes[4]};
     list.itemImages = {covers[1], covers[2], covers[3], covers[4]};
     list.coverPath = covers.back();
@@ -101,13 +105,13 @@ int main(int argc, char** argv) {
 
     coverplayer::platform::ViewModel tracks;
     tracks.screen = coverplayer::platform::Screen::Tracks;
-    tracks.title = "239  SIEBEN PALMEN";
+    tracks.title = demo("239  SIEBEN PALMEN", "GOBLET OF FIRE");
     tracks.coverPath = covers[3];
     tracks.selected = 4;
     tracks.items = {
-        "01  Ankunft auf der Insel  [FERTIG]", "02  Der erste Hinweis  [FERTIG]",
-        "03  Spuren im Sand  [FERTIG]", "04  Die Nachtwache  [FERTIG]",
-        "05  Eine neue Entdeckung  [8:14]", "06  Das Geheimnis"
+        demo("01  Ankunft auf der Insel  [FERTIG]", "01  A summer invitation  [DONE]"), demo("02  Der erste Hinweis  [FERTIG]", "02  A journey with friends  [DONE]"),
+        demo("03  Spuren im Sand  [FERTIG]", "03  An unexpected visitor  [DONE]"), demo("04  Die Nachtwache  [FERTIG]", "04  The evening gathering  [DONE]"),
+        demo("05  Eine neue Entdeckung  [8:14]", "05  A new discovery  [8:14]"), demo("06  Das Geheimnis", "06  The secret")
     };
     if (!render(renderer, tracks, (output / "04-titelliste.bmp").u8string())) return 1;
 
@@ -115,16 +119,16 @@ int main(int argc, char** argv) {
     renderer.setSleepTimer(30);
     coverplayer::platform::ViewModel player;
     player.screen = coverplayer::platform::Screen::Player;
-    player.title = "Die schwarze Rose";
-    player.subtitle = "240  DIE SCHWARZE ROSE  |  TITEL 1/1";
+    player.title = demo("Die schwarze Rose", "A message at dawn");
+    player.subtitle = demo("240  DIE SCHWARZE ROSE  |  TITEL 1/1", "ORDER OF THE PHOENIX  |  CHAPTER 1/38");
     player.coverPath = covers.back();
     if (!render(renderer, player, (output / "05-jetzt-laeuft.bmp").u8string())) return 1;
 
     coverplayer::platform::ViewModel bluetooth;
     bluetooth.screen = coverplayer::platform::Screen::Bluetooth;
-    bluetooth.title = "BLUETOOTH-KOPFHOERER";
-    bluetooth.subtitle = "BLUETOOTH AN  |  AUDIO AKTIV";
-    bluetooth.items = {"Soundcore Q30  [AKTIV]", "JBL Flip 6", "WH-1000XM4  [VERBUNDEN]"};
+    bluetooth.title = demo("BLUETOOTH-KOPFHOERER", "BLUETOOTH HEADPHONES");
+    bluetooth.subtitle = demo("BLUETOOTH AN  |  AUDIO AKTIV", "BLUETOOTH ON  |  AUDIO ACTIVE");
+    bluetooth.items = {demo("Soundcore Q30  [AKTIV]", "Soundcore Q30  [ACTIVE]"), "JBL Flip 6", demo("WH-1000XM4  [VERBUNDEN]", "WH-1000XM4  [CONNECTED]")};
     if (!render(renderer, bluetooth, (output / "06-bluetooth.bmp").u8string())) return 1;
 
     const std::vector<std::string> kidsCovers{
@@ -136,9 +140,9 @@ int main(int argc, char** argv) {
     kids.screen = coverplayer::platform::Screen::CoverFlow;
     kids.title = "DIE DREI ??? KIDS";
     kids.items = {
-        "70  Aufbruch ins All|1 TITEL", "71  Tatort Trampolin|6 TITEL",
-        "103  SOS im Bike-Park|7 TITEL  36% GEHOERT", "86  Riesen in Rocky Beach|1 TITEL",
-        "66  Geheimnis im Meer|5 TITEL"
+        demo("70  Aufbruch ins All|1 TITEL", "70  Aufbruch ins All|1 TRACK"), demo("71  Tatort Trampolin|6 TITEL", "71  Tatort Trampolin|6 TRACKS"),
+        demo("103  SOS im Bike-Park|7 TITEL  36% GEHOERT", "103  SOS im Bike-Park|7 TRACKS  36% LISTENED"), demo("86  Riesen in Rocky Beach|1 TITEL", "86  Riesen in Rocky Beach|1 TRACK"),
+        demo("66  Geheimnis im Meer|5 TITEL", "66  Geheimnis im Meer|5 TRACKS")
     };
     kids.itemImages = kidsCovers;
     kids.selected = 2;
@@ -148,7 +152,7 @@ int main(int argc, char** argv) {
     coverplayer::platform::ViewModel checkPod;
     checkPod.screen = coverplayer::platform::Screen::Player;
     checkPod.title = "CheckPod: Gaming";
-    checkPod.subtitle = "CHECKER TOBI  |  PODCAST-FOLGE";
+    checkPod.subtitle = demo("CHECKER TOBI  |  PODCAST-FOLGE", "CHECKER TOBI  |  PODCAST EPISODE");
     checkPod.coverPath = (source / "checkpod.jpg").u8string();
     renderer.setPlaybackStatus(true, false, 812.0, 1496.0);
     renderer.setPlayerDetails(58, 1, {}, 76);
@@ -195,20 +199,20 @@ int main(int argc, char** argv) {
     renderer.setHelpVisible(false);
     coverplayer::platform::ViewModel longTracks;
     longTracks.screen = coverplayer::platform::Screen::Tracks;
-    longTracks.title = "239 - Sieben Palmen";
+    longTracks.title = demo("239 - Sieben Palmen", "Goblet of Fire");
     longTracks.coverPath = covers[3];
     longTracks.selected = 2;
     longTracks.items = {
-        "239 - Sieben Palmen (Teil 01) - Eine geheimnisvolle Entdeckung",
-        "239 - Sieben Palmen (Teil 02) - Die Spur fuehrt zur Villa",
-        "239 - Sieben Palmen (Teil 03) - Das Versteck unter den Palmen",
-        "239 - Sieben Palmen (Teil 04) - Das Raetsel wird geloest"
+        demo("239 - Sieben Palmen (Teil 01) - Eine geheimnisvolle Entdeckung", "Goblet of Fire (Chapter 01) - A mysterious discovery"),
+        demo("239 - Sieben Palmen (Teil 02) - Die Spur fuehrt zur Villa", "Goblet of Fire (Chapter 02) - The path to the old house"),
+        demo("239 - Sieben Palmen (Teil 03) - Das Versteck unter den Palmen", "Goblet of Fire (Chapter 03) - A secret beneath the trees"),
+        demo("239 - Sieben Palmen (Teil 04) - Das Raetsel wird geloest", "Goblet of Fire (Chapter 04) - The mystery is finally solved")
     };
     if (!render(renderer, longTracks, (output / "13-long-tracks.bmp").u8string())) return 1;
     coverplayer::platform::ViewModel longPlayer;
     longPlayer.screen = coverplayer::platform::Screen::Player;
     longPlayer.title = longTracks.items[longTracks.selected];
-    longPlayer.subtitle = "239 - Sieben Palmen  |  TITEL 3/4";
+    longPlayer.subtitle = demo("239 - Sieben Palmen  |  TITEL 3/4", "GOBLET OF FIRE  |  CHAPTER 3/37");
     longPlayer.coverPath = longTracks.coverPath;
     renderer.setPlaybackStatus(true, false, 843.0, 1860.0);
     renderer.setPlayerDetails(45, 3, {}, 76);

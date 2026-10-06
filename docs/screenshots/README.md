@@ -1,5 +1,12 @@
 # Demo screenshot review
 
+The additional [English demo gallery](generated/en/README.md) is generated with
+`./scripts/Generate-DemoScreenshots.ps1 -Language en`. Its default output is
+`docs/screenshots/generated/en`; the German output location is unchanged.
+English audiobook examples use the existing English cover files. German media
+examples retain their original titles and cover art. Chapter names, playback
+positions and progress values are fictional demo data.
+
 Reviewed on 2026-10-06. RC4 device approval is based on the user's Knulli
 and muOS tests; this review did not deploy to either device.
 

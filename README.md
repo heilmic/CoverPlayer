@@ -55,6 +55,13 @@ A safer solution is tracked in [TODO.md](TODO.md).
 
 ## Screenshots
 
+[English interface and audiobook demo gallery](docs/screenshots/generated/en/README.md)
+· [German demo screenshots](docs/screenshots/generated)
+
+| English audiobook library | English playback |
+| --- | --- |
+| ![English audiobook library](docs/screenshots/generated/en/01-coverflow.png) | ![English playback](docs/screenshots/generated/en/05-jetzt-laeuft.png) |
+
 | Now playing | Album list |
 | --- | --- |
 | ![Now playing](docs/screenshots/generated/05-jetzt-laeuft.png) | ![Album list](docs/screenshots/generated/03-albumliste.png) |
@@ -101,6 +108,7 @@ The repeatable Windows workflows are:
 ```powershell
 ./scripts/Build-And-Test.ps1
 ./scripts/Generate-DemoScreenshots.ps1
+./scripts/Generate-DemoScreenshots.ps1 -Language en
 ./scripts/Deploy-Knulli.ps1 -IncludeTest
 ./scripts/Deploy-muOS.ps1
 ./scripts/Publish-Release.ps1 -Tag v0.1.0-rc.4 -DryRun
