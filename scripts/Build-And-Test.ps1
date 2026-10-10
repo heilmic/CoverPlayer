@@ -27,6 +27,10 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Desktop tests failed.' }
     & $pythonCommand.Source "$repositoryRoot/tests/verify_package_test.py"
     if ($LASTEXITCODE -ne 0) { throw 'Package verifier tests failed.' }
+    & $pythonCommand.Source "$repositoryRoot/tests/doc_links_test.py"
+    if ($LASTEXITCODE -ne 0) { throw 'Documentation checker tests failed.' }
+    & $pythonCommand.Source "$repositoryRoot/scripts/check-doc-links.py"
+    if ($LASTEXITCODE -ne 0) { throw 'Documentation link checks failed.' }
 
     if ($Mp3Path) {
         if (!(Test-Path -LiteralPath $Mp3Path -PathType Leaf)) { throw "MP3 not found: $Mp3Path" }

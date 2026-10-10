@@ -25,7 +25,7 @@ the GitHub release notes. The original v1.0.0 Git tag remains unchanged.
 - Collection management shows X/Delete directly; the player shows Up/Down
   track switching. Knulli/muOS retain VOL and their existing compact layout.
 - **Experimental Switch alpha 5:** standalone NRO, writable SD state/cache,
-  Nintendo button mapping, embedded font/icon, dedicated 1280 × 720 interface
+  Nintendo button mapping, embedded font/icon, dedicated 1280 Ã— 720 interface
   and verified FTP deployment. Basic collections/playback are user-confirmed;
   Lite, docking and extended lifecycle validation remain pending. No audio
   sysmodule or Tesla/Ultrahand overlay is bundled.

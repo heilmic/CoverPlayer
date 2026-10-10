@@ -22,6 +22,10 @@ Omit `-SkipPackages` to also build ARM64 packages using Docker Desktop.
 Add `-Mp3Path <file>` for the optional real-file seek test.
 Build outputs stay under `build/`; building does not install or publish anything.
 
+The build-and-test script also checks tracked Markdown for valid UTF-8, exact
+repository paths and heading anchors. To include external URLs and published
+release notes, run `python scripts/check-doc-links.py --online --release v1.0.0`.
+
 Linux also runs the playback-power and fake-PulseAudio lifecycle tests. The
 power test uses an isolated filesystem; its explicit `--knulli-hardware-check`
 mode changes real brightness and invokes firmware idle hooks for a device test.

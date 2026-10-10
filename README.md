@@ -53,7 +53,7 @@ C++17 and SDL2. See the [build, test and deployment guide](docs/development/READ
 [architecture](docs/architecture.md) and [roadmap](TODO.md).
 The main branch can contain changes newer than the latest downloadable release.
 
-The [Switch alpha 5](docs/switch.md) uses a dedicated 1280 × 720 interface.
+The [Switch alpha 5](docs/switch.md) uses a dedicated 1280 Ã— 720 interface.
 Collection creation and playback have been confirmed on Switch; Lite, docking
 and extended lifecycle tests remain pending. [Install and controls](packaging/switch/README.md).
 
