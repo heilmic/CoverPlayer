@@ -4,3 +4,7 @@ out/
 CMakeUserPresets.json
 docs/screenshots/source-covers/
 scripts/deploy.local.json
+
+# Local incoming source archive and superseded visual review output
+/CoverPlayer-CoverFlow-Audio-Update.zip
+/docs/screenshots/previews/

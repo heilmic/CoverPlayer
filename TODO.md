@@ -3,8 +3,10 @@
 Knulli reliability and cover-first offline playback take priority. This is a
 backlog, not a commitment to implement every feature.
 
-## Before the next release
+## Reliability follow-ups
 
+- Invalidate the in-memory artwork cache on rescan when a cover is replaced
+  under the same filename; restarting currently reloads it.
 - Investigate intermittent Bluetooth audio stutter reported during dimmed playback.
   The inspected session was not muted and showed no audio-server underruns;
   the cause remains unconfirmed.
@@ -15,8 +17,6 @@ backlog, not a commitment to implement every feature.
   [Recovery limits](docs/coverflow-audio-update.md#restoration-and-limitations).
 - Validate the capability-gated muOS power adapter on real muOS hardware;
   its isolated fixture tests do not establish firmware compatibility.
-- Choose a version and exercise the real release publication workflow.
-  Test deployment, backup and verification already work; a push is not a release.
 
 ## Optional improvements
 

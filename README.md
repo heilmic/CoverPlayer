@@ -1,5 +1,7 @@
 # CoverPlayer
 
+**1.0.0 — First stable release**, built and tested primarily for Knulli handhelds.
+
 An offline MP3 player for handheld game systems: browse music, audiobooks,
 radio plays and podcasts with a controller. **Knulli is the primary platform**;
 muOS also supports library browsing and background playback.

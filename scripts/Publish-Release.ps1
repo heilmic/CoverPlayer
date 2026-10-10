@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
     [ValidatePattern('^v\d+\.\d+\.\d+(?:-rc\.\d+)?$')]
@@ -17,7 +17,7 @@ if ([string]::IsNullOrWhiteSpace($python)) { throw 'Python is required for packa
 if (!(Get-Command git.exe -ErrorAction SilentlyContinue)) { throw 'Git is required.' }
 if (!(Get-Command gh.exe -ErrorAction SilentlyContinue)) { throw 'GitHub CLI is required.' }
 
-$lines = Get-Content -LiteralPath $changelog
+$lines = Get-Content -LiteralPath $changelog -Encoding UTF8
 $headingPattern = '^##\s+' + [regex]::Escape($Tag) + '(?:\s|$)'
 $headingIndex = -1
 for ($index = 0; $index -lt $lines.Count; ++$index) {
@@ -86,6 +86,7 @@ try {
         $releaseArgs = @('release', 'create', $Tag) + $assets +
             @('--verify-tag', '--title', $Title, '--notes-file', $notesFile)
         if ($Tag -match '-rc\.') { $releaseArgs += '--prerelease' }
+        else { $releaseArgs += '--latest' }
         & gh @releaseArgs
         if ($LASTEXITCODE -ne 0) { throw "Publishing GitHub release $Tag failed." }
     } finally {
