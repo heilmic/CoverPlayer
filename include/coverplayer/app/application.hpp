@@ -117,6 +117,7 @@ private:
     platform::FileSystem& fileSystem_;
     std::string mediaRoot_;
     std::string currentMediaId_;
+    bool trackEndHandled_ = false;
     std::string currentTrackName_;
     std::string lastError_;
     std::string initialMediaPath_;

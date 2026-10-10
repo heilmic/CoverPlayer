@@ -4,7 +4,8 @@
 
 An offline MP3 player for handheld game systems: browse music, audiobooks,
 radio plays and podcasts with a controller. **Knulli is the primary platform**;
-muOS also supports library browsing and background playback.
+muOS also supports library browsing and background playback. An experimental
+[Nintendo Switch / Switch Lite NRO](docs/switch.md) is available in the same release.
 
 ![Music CoverFlow, captured from the native interface](docs/screenshots/generated/en/coverplayer-coverflow.gif)
 
@@ -16,6 +17,7 @@ muOS also supports library browsing and background playback.
 
 - CoverFlow and list views for your own folders, organized as named collections.
 - Resume playback, bookmarks, automatic next track and a sleep timer.
+- Keep listening while choosing another track in the same album; per-track artwork in the player.
 - Background listening while playing games; Knulli lowers game audio by about 6 dB.
 - Screen dimming during playback, with normal standby restored when playback stops.
 - German and English controls; Bluetooth management for devices paired in Knulli.
@@ -50,6 +52,10 @@ respective rights holders; [cover sources](docs/screenshots/demo-cover-sources.m
 C++17 and SDL2. See the [build, test and deployment guide](docs/development/README.md),
 [architecture](docs/architecture.md) and [roadmap](TODO.md).
 The main branch can contain changes newer than the latest downloadable release.
+
+The [Switch alpha 5](docs/switch.md) uses a dedicated 1280 � 720 interface.
+Collection creation and playback have been confirmed on Switch; Lite, docking
+and extended lifecycle tests remain pending. [Install and controls](packaging/switch/README.md).
 
 [Apache-2.0](LICENSE) · [Third-party notices](THIRD_PARTY_NOTICES.md) ·
 [Support on Ko-fi](https://ko-fi.com/heilmic)

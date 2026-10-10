@@ -4,7 +4,7 @@
 #include <functional>
 namespace coverplayer::platform { class FileSystem; }
 namespace coverplayer::library {
-struct Track { std::string name; std::string path; std::string artist; std::string album; int trackNumber = 0; double durationSeconds = 0.0; };
+struct Track { std::string name; std::string path; std::string artist; std::string album; int trackNumber = 0; double durationSeconds = 0.0; std::string coverPath; };
 struct Collection {
     std::string name;
     std::string path;

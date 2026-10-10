@@ -27,7 +27,7 @@ bool writeNode(std::ostream& output, const library::Collection& node, std::size_
     for (const auto& track : node.tracks) {
         output << std::quoted(track.name) << ' ' << std::quoted(track.path) << ' '
             << std::quoted(track.artist) << ' ' << std::quoted(track.album) << ' '
-            << track.trackNumber << ' ' << track.durationSeconds << '\n';
+            << track.trackNumber << ' ' << track.durationSeconds << ' ' << std::quoted(track.coverPath) << '\n';
     }
     for (const auto& child : node.children) if (!writeNode(output, child, depth + 1)) return false;
     return static_cast<bool>(output);
@@ -43,7 +43,7 @@ bool readNode(std::istream& input, library::Collection& node, std::size_t depth,
     for (std::size_t index = 0; index < trackTotal; ++index) {
         library::Track track;
         if (!(input >> std::quoted(track.name) >> std::quoted(track.path) >> std::quoted(track.artist)
-            >> std::quoted(track.album) >> track.trackNumber >> track.durationSeconds)) return false;
+            >> std::quoted(track.album) >> track.trackNumber >> track.durationSeconds >> std::quoted(track.coverPath))) return false;
         node.tracks.push_back(std::move(track));
     }
     node.children.resize(childTotal);
@@ -66,7 +66,7 @@ std::filesystem::path FileLibraryCache::pathFor(const std::string& root) const {
 std::optional<std::vector<library::Collection>> FileLibraryCache::load(const std::string& root, std::uint64_t fingerprint) {
     std::ifstream input(pathFor(root));
     std::string header, cachedRoot; std::uint64_t cachedFingerprint = 0;
-    if (!std::getline(input, header) || header != "COVERPLAYER_LIBRARY 4" ||
+    if (!std::getline(input, header) || header != "COVERPLAYER_LIBRARY 5" ||
         !(input >> std::quoted(cachedRoot) >> cachedFingerprint) || cachedRoot != root ||
         cachedFingerprint != fingerprint) return std::nullopt;
     std::size_t nodeTotal = 0;
@@ -83,7 +83,7 @@ bool FileLibraryCache::save(const std::string& root, std::uint64_t fingerprint,
     const auto target = pathFor(root); const auto temporary = std::filesystem::path(target.string() + ".tmp");
     {
         std::ofstream output(temporary, std::ios::trunc);
-        output << "COVERPLAYER_LIBRARY 4\n" << std::quoted(root) << ' ' << fingerprint << '\n'
+        output << "COVERPLAYER_LIBRARY 5\n" << std::quoted(root) << ' ' << fingerprint << '\n'
             << collections.size() << '\n';
         for (const auto& node : collections) if (!writeNode(output, node, 0)) return false;
         output.flush(); if (!output) return false;

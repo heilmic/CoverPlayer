@@ -20,10 +20,14 @@ backlog, not a commitment to implement every feature.
 
 ## Optional improvements
 
+- Extend [Switch alpha](docs/switch.md) hardware validation to Lite, docking,
+  HOME/sleep transitions and long sessions; evaluate an audio sysmodule with
+  Ultrahand/Tesla controls later. Basic playback and collections work on Switch.
+
 - Continue-listening row using existing progress, with last-played ordering and
   clear handling of completed or unavailable media.
-- Browse while listening, keeping the playing album independent of selection
-  and preserving auto-next. Review button conflicts and return-to-player behavior.
+- Extend browsing during playback beyond the current album. Within-album track
+  browsing and automatic next-track playback are implemented.
 - Page jumps and accelerated seeking if device testing demonstrates a need.
 - Offline podcast downloads: RSS browsing and manual episode downloads first.
   Define MP3 format compatibility, use temporary downloads, expose only complete

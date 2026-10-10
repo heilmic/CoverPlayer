@@ -94,7 +94,7 @@ std::optional<Collection> scanDirectory(ScanContext& context, const std::string&
             const auto filename = entry.name.substr(0, entry.name.size() - 4);
             const auto durationSeconds = coverplayer::audio::estimateMp3DurationSeconds(entry.path);
             directTracks.push_back({{metadata.title.empty() ? filename : metadata.title, entry.path,
-                metadata.artist, metadata.album, metadata.trackNumber, durationSeconds}, metadata.embeddedCoverPath});
+                metadata.artist, metadata.album, metadata.trackNumber, durationSeconds, metadata.embeddedCoverPath}, metadata.embeddedCoverPath});
         } else if (folderCover.empty() && isCover(entry.name)) {
             folderCover = entry.path;
         }

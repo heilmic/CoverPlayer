@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 #include <stdexcept>
 #include <utility>
 #include <vector>
@@ -60,6 +61,11 @@ SdlRenderer::SdlRenderer() {
 
     int windowWidth = 640;
     int windowHeight = 480;
+#ifdef COVERPLAYER_SWITCH_UI
+    windowWidth = 1280;
+    windowHeight = 720;
+    uiWidth_ = 1280;
+#else
     SDL_DisplayMode display{};
     const bool hasDisplayMode = SDL_GetCurrentDisplayMode(0, &display) == 0;
     const char* requestedWidth = SDL_getenv("COVERPLAYER_UI_WIDTH");
@@ -74,6 +80,7 @@ SdlRenderer::SdlRenderer() {
         windowWidth = display.w;
         windowHeight = display.h;
     }
+#endif
 
     window_ = SDL_CreateWindow(
         "CoverPlayer",
@@ -92,8 +99,6 @@ SdlRenderer::SdlRenderer() {
     if (renderer_ == nullptr) {
         renderer_ = SDL_CreateRenderer(window_, -1, SDL_RENDERER_SOFTWARE);
     }
-    SDL_RenderSetLogicalSize(renderer_, uiWidth_, 480);
-    SDL_Log("CoverPlayer UI: %dx480, window: %dx%d", uiWidth_, windowWidth, windowHeight);
     if (renderer_ == nullptr) {
         const std::string message = SDL_GetError();
         SDL_DestroyWindow(window_);
@@ -102,7 +107,27 @@ SdlRenderer::SdlRenderer() {
         throw std::runtime_error("SDL renderer creation failed: " + message);
     }
 
-    font_ = TTF_OpenFont("assets/fonts/RobotoMono-Bold.ttf", 18);
+#ifdef COVERPLAYER_SWITCH_UI
+    SDL_RenderSetLogicalSize(renderer_, 1280, 720);
+#else
+    SDL_RenderSetLogicalSize(renderer_, uiWidth_, 480);
+#endif
+#ifdef COVERPLAYER_SWITCH_UI
+    SDL_Log("CoverPlayer UI: 1280x720, window: %dx%d", windowWidth, windowHeight);
+#else
+    SDL_Log("CoverPlayer UI: %dx480, window: %dx%d", uiWidth_, windowWidth, windowHeight);
+#endif
+#ifdef __SWITCH__
+    constexpr const char* fontPath = "romfs:/assets/fonts/RobotoMono-Bold.ttf";
+#else
+    constexpr const char* fontPath = "assets/fonts/RobotoMono-Bold.ttf";
+#endif
+#ifdef COVERPLAYER_SWITCH_UI
+    constexpr int bodyFontSize = 28, headingFontSize = 40;
+#else
+    constexpr int bodyFontSize = 18, headingFontSize = 26;
+#endif
+    font_ = TTF_OpenFont(fontPath, bodyFontSize);
     if (font_ == nullptr) {
         const std::string message = TTF_GetError();
         SDL_DestroyRenderer(renderer_);
@@ -112,7 +137,7 @@ SdlRenderer::SdlRenderer() {
         TTF_Quit();
         throw std::runtime_error("Font loading failed: " + message);
     }
-    titleFont_ = TTF_OpenFont("assets/fonts/RobotoMono-Bold.ttf", 26);
+    titleFont_ = TTF_OpenFont(fontPath, headingFontSize);
     if (titleFont_ == nullptr) {
         const std::string message = TTF_GetError();
         TTF_CloseFont(font_);
@@ -126,7 +151,10 @@ SdlRenderer::SdlRenderer() {
     }
     // The device can have a newer SDL than our build headers. Resolve its
     // batching API at runtime instead of permanently selecting the strip path.
-#ifdef _WIN32
+#ifdef __SWITCH__
+    // Switch libraries are static and the bundled SDL exposes geometry.
+    renderGeometry_ = reinterpret_cast<RenderGeometry>(&SDL_RenderGeometry);
+#elif defined(_WIN32)
     geometryLibrary_ = SDL_LoadObject("SDL2.dll");
 #else
     geometryLibrary_ = SDL_LoadObject("libSDL2-2.0.so.0");
@@ -193,7 +221,11 @@ void SdlRenderer::present() {
     updateCover();
     updateCoverFlowTextures();
     trimCoverCache();
+#ifdef COVERPLAYER_SWITCH_UI
+    renderSwitchUi();
+#else
     renderHandheldUi();
+#endif
 }
 
 void SdlRenderer::updateCover() {
@@ -226,8 +258,13 @@ void SdlRenderer::collectCover() {
 }
 
 void SdlRenderer::trimCoverCache() {
-    // At most ~14 MiB of RGBA artwork; retain recent covers for quick reversals.
-    while (coverCache_.size() > 24) {
+    // Switch: <=16 MiB at 512px, handhelds: <=14 MiB at 384px.
+#ifdef COVERPLAYER_SWITCH_UI
+    constexpr std::size_t cacheLimit = 16;
+#else
+    constexpr std::size_t cacheLimit = 24;
+#endif
+    while (coverCache_.size() > cacheLimit) {
         auto oldest = coverCache_.end();
         for (auto it = coverCache_.begin(); it != coverCache_.end(); ++it) {
             if (it->first == loadedCoverPath_ ||
@@ -243,7 +280,11 @@ void SdlRenderer::trimCoverCache() {
 SDL_Surface* SdlRenderer::decodeCover(const std::string& path) {
     SDL_Surface* source = IMG_Load(path.c_str());
     if (source == nullptr) return nullptr;
+#ifdef COVERPLAYER_SWITCH_UI
+    constexpr int maximumSide = 512;
+#else
     constexpr int maximumSide = 384;
+#endif
     const float scale = std::min(1.0F, std::min(
         static_cast<float>(maximumSide) / source->w,
         static_cast<float>(maximumSide) / source->h));
@@ -400,14 +441,25 @@ void SdlRenderer::drawPerspectiveCover(SDL_Texture* texture, float offset, Uint8
     // and first side slot, without the old pow() acceleration kink.
     const float travel = (distance <= 1.0F
         ? 158.0F * distance + 110.0F * distance * distance * (1.0F - distance)
-        : 158.0F + (distance - 1.0F) * 48.0F) * static_cast<float>(uiWidth_) / 640.0F;
+        : 158.0F + (distance - 1.0F) * 48.0F) *
+#ifdef COVERPLAYER_SWITCH_UI
+        1.5F;
+#else
+        static_cast<float>(uiWidth_) / 640.0F;
+#endif
     const float centerX = static_cast<float>(uiWidth_) * 0.5F + direction * travel;
     const float smoothTurn = sideDistance * sideDistance * (3.0F - 2.0F * sideDistance);
     const float angle = direction * smoothTurn * 0.98F;
     const float depth = 1.0F + 0.13F * distance;
+#ifdef COVERPLAYER_SWITCH_UI
+    const float halfSize = view_.items.size() == 1 ? 208.0F : 200.0F;
+    constexpr float focalLength = 780.0F;
+    constexpr float centerY = 322.0F;
+#else
     const float halfSize = view_.items.size() == 1 ? 132.0F : 128.0F;
     constexpr float focalLength = 520.0F;
     constexpr float centerY = 214.0F;
+#endif
     const auto project = [&](float u) {
         const float localX = (u * 2.0F - 1.0F) * halfSize;
         const float scale = focalLength / (focalLength * depth - localX * std::sin(angle));
@@ -520,7 +572,11 @@ void SdlRenderer::renderCoverFlow() {
             std::abs(static_cast<float>(rightSlot - centerSlot) + animationOffset);
     });
 
+#ifdef COVERPLAYER_SWITCH_UI
+    const SDL_Rect artworkArea{0, 84, uiWidth_, 450};
+#else
     const SDL_Rect artworkArea{0, 70, uiWidth_, 288};
+#endif
     SDL_RenderSetClipRect(renderer_, &artworkArea);
     for (const int slot : slots) {
         const float offset = static_cast<float>(slot - centerSlot) + animationOffset;
@@ -536,10 +592,23 @@ void SdlRenderer::renderCoverFlow() {
     const auto detail = separator == std::string::npos ? std::string{} : view_.items[captionIndex].substr(separator + 1);
     int textWidth = 0, textHeight = 0;
     TTF_SizeUTF8(titleFont_, name.c_str(), &textWidth, &textHeight);
+#ifdef COVERPLAYER_SWITCH_UI
+    // Fit before measuring so long captions remain visually centered.
+    const int capacity = textCapacity(uiWidth_ - 96, titleFont_);
+    const auto fitted = utf8Length(name) > static_cast<std::size_t>(capacity)
+        ? name.substr(0, utf8ByteOffsetOfCodepoint(name, static_cast<std::size_t>(capacity - 3))) + "..." : name;
+    TTF_SizeUTF8(titleFont_, fitted.c_str(), &textWidth, &textHeight);
+    drawText(fitted.c_str(), (uiWidth_ - textWidth) / 2, 548, SDL_Color{244,247,251,255}, titleFont_);
+#else
     drawFittedText(name, std::max(20, (uiWidth_ - textWidth) / 2), 362, 38 + (uiWidth_ - 640) / 14, SDL_Color{244,247,251,255}, titleFont_);
+#endif
     const std::string meta = detail + "    " + std::to_string(captionIndex + 1) + "/" + std::to_string(count);
     TTF_SizeUTF8(font_, meta.c_str(), &textWidth, &textHeight);
+#ifdef COVERPLAYER_SWITCH_UI
+    drawFittedText(meta, std::max(48, (uiWidth_ - textWidth) / 2), 596, textCapacity(uiWidth_ - 96), SDL_Color{143,154,170,255});
+#else
     drawText(meta.c_str(), std::max(20, (uiWidth_ - textWidth) / 2), 394, SDL_Color{143,154,170,255});
+#endif
 }
 
 void SdlRenderer::drawPlaybackSymbol(int centerX, int centerY, bool paused) {
@@ -592,7 +661,13 @@ void SdlRenderer::drawSelectableList(const std::vector<std::string>& items, std:
         }
         drawFittedText(name, layout.x + 16, y, layout.maxCharacters, primaryColor);
         if (layout.twoLine && !detail.empty()) {
-            drawFittedText(detail, layout.x + 16, y + 20, layout.maxCharacters, SDL_Color{125, 137, 154, 255});
+            drawFittedText(detail, layout.x + 16, y +
+#ifdef COVERPLAYER_SWITCH_UI
+                34,
+#else
+                20,
+#endif
+                layout.maxCharacters, SDL_Color{125, 137, 154, 255});
         }
     }
 }
@@ -656,7 +731,9 @@ void SdlRenderer::renderHandheldUi() {
     else if (view_.screen == Screen::Bluetooth) section = "BLUETOOTH";
     if(view_.screen==Screen::Player){
         drawText(tr(language_,section),252+extraWidth,22,SDL_Color{155,166,184,255});drawBluetoothIcon(400+extraWidth,20);
+#ifndef __SWITCH__
         const std::string volume="VOL "+std::to_string(volumePercent_)+"%";drawText(volume.c_str(),430+extraWidth,22,SDL_Color{203,210,220,255});
+#endif
         if(batteryPercent_){drawBatteryIcon(528+extraWidth,24,*batteryPercent_);const std::string battery=std::to_string(*batteryPercent_)+"%";drawText(battery.c_str(),558+extraWidth,22,SDL_Color{203,210,220,255});}
         if(sleepMinutes_>0){const std::string sleep=std::to_string(sleepMinutes_)+"m";drawText(sleep.c_str(),607+extraWidth,22,SDL_Color{242,190,92,255});}
     } else {
@@ -750,9 +827,9 @@ void SdlRenderer::renderHandheldUi() {
     SDL_SetRenderDrawColor(renderer_,19,23,32,255);const SDL_Rect footer{0,423,uiWidth_,57};SDL_RenderFillRect(renderer_,&footer);
     const char* primaryHint = "A OEFFNEN   Y VERWALTEN   X SCANNEN";
     switch (view_.screen) {
-        case Screen::Player: primaryHint = "A PLAY/PAUSE   B ZURUECK"; break;
+        case Screen::Player: primaryHint = "A PAUSE   OBEN/UNTEN TITEL   B ZURUECK"; break;
         case Screen::Folders: primaryHint = "A OEFFNEN   Y ORDNER WAEHLEN"; break;
-        case Screen::CollectionManager: primaryHint = "A BEARBEITEN   Y PFAD   B ZURUECK"; break;
+        case Screen::CollectionManager: primaryHint = "A EDIT   Y PFAD   X LOESCHEN"; break;
         case Screen::CollectionType: primaryHint = "A TYP WAEHLEN   B ZURUECK"; break;
         case Screen::CollectionName: primaryHint = "A ZEICHEN   Y SPEICHERN   B ABBRECHEN"; break;
         case Screen::CollectionDelete: primaryHint = "A LOESCHEN   B ABBRECHEN"; break;
@@ -764,9 +841,17 @@ void SdlRenderer::renderHandheldUi() {
     }
     drawFittedText(tr(language_,primaryHint),18,view_.screen==Screen::Player?427:442,40+extraWidth/11,SDL_Color{171,181,196,255});
     if (view_.screen==Screen::Player)
+#ifdef __SWITCH__
+        drawFittedText(language_==Language::German?"PLUS KURZ SLEEP / LANG BEENDEN":"TAP PLUS SLEEP / HOLD PLUS QUIT",18,451,40+extraWidth/11,SDL_Color{171,181,196,255});
+#else
         drawFittedText(tr(language_,"START KURZ SLEEP / LANG HINTERGRUND"),18,451,40+extraWidth/11,SDL_Color{171,181,196,255});
+#endif
     SDL_SetRenderDrawColor(renderer_,37,71,61,255);const SDL_Rect helpBadge{uiWidth_-162,430,146,38};SDL_RenderFillRect(renderer_,&helpBadge);
+#ifdef __SWITCH__
+    drawText(language_==Language::German?"MINUS HILFE":"MINUS HELP",uiWidth_-156,440,SDL_Color{232,247,239,255});
+#else
     drawText(tr(language_,"SELECT HILFE"),uiWidth_-156,440,SDL_Color{232,247,239,255});
+#endif
     if(helpVisible_){
         SDL_SetRenderDrawBlendMode(renderer_,SDL_BLENDMODE_NONE);
         SDL_SetRenderDrawColor(renderer_,7,9,14,255);
@@ -794,6 +879,12 @@ void SdlRenderer::renderHandheldUi() {
             case Screen::Tracks: rows={{{"A","Abspielen / Fortsetzen"},{"B","Zurueck zur Albumansicht"},{"STEUERKREUZ","Titel auswaehlen"}}}; note="Fortsetzbarer Titel ist vorausgewaehlt"; break;
             case Screen::Folders: rows={{{"A","Ordner oeffnen"},{"B","Zurueck"},{"Y","Diesen Ordner auswaehlen"}}}; break;
         }
+#ifdef __SWITCH__
+        if (view_.screen==Screen::Player) {
+            rows[5]={language_==Language::German?"PLUS KURZ":"TAP PLUS","Sleep-Timer"};
+            rows[6]={"PLUS 2s",language_==Language::German?"App beenden":"Quit app"};
+        }
+#endif
         for (std::size_t index=0;index<rows.size() && rows[index].key!=nullptr;++index) {
             const int y=151+static_cast<int>(index)*31;
             if (index%2==0) {
@@ -804,17 +895,29 @@ void SdlRenderer::renderHandheldUi() {
             const SDL_Rect keycap{48,y,153,25};SDL_RenderFillRect(renderer_,&keycap);
             SDL_SetRenderDrawColor(renderer_,92,211,151,255);SDL_RenderDrawRect(renderer_,&keycap);
             const char* key=tr(language_,rows[index].key);
+#ifdef __SWITCH__
+            if (std::strcmp(rows[index].key,"L1/R1")==0) key="L/R";
+            if (std::strcmp(rows[index].key,"L1")==0) key="L";
+#endif
             int keyWidth=0,keyHeight=0;
             TTF_SizeUTF8(font_,key,&keyWidth,&keyHeight);
             drawFittedText(key,48+std::max(4,(153-keyWidth)/2),y+3,13,SDL_Color{232,247,239,255});
             drawFittedText(tr(language_,rows[index].action),220,y+3,34+extraWidth/11,SDL_Color{244,247,251,255});
         }
         if (note!=nullptr) drawFittedText(tr(language_,note),48,365,48+extraWidth/11,SDL_Color{143,154,170,255});
+#ifdef __SWITCH__
+        drawFittedText(language_==Language::German?"PLUS+MINUS  Beenden (Hilfe zu)":"PLUS+MINUS  Quit (close help)",48,390,48+extraWidth/11,SDL_Color{242,190,92,255});
+#else
         drawFittedText(tr(language_,"START+SELECT  App beenden (Hilfe zu)"),48,390,48+extraWidth/11,SDL_Color{242,190,92,255});
+#endif
         SDL_SetRenderDrawColor(renderer_,19,23,32,255);const SDL_Rect helpFooter{0,423,uiWidth_,57};SDL_RenderFillRect(renderer_,&helpFooter);
         drawText(language_==Language::German?"Y ENGLISH":"Y DEUTSCH",18,442,SDL_Color{92,211,151,255});
         if(bluetoothCapable_&&view_.screen!=Screen::Bluetooth)drawText("X BLUETOOTH",180,442,SDL_Color{171,181,196,255});
+#ifdef __SWITCH__
+        drawText(language_==Language::German?"B / MINUS SCHLIESSEN":"B / MINUS CLOSE",uiWidth_-254,442,SDL_Color{171,181,196,255});
+#else
         drawText(tr(language_,"B / SELECT SCHLIESSEN"),uiWidth_-254,442,SDL_Color{171,181,196,255});
+#endif
     }
     SDL_RenderPresent(renderer_);
 }

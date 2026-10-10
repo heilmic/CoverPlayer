@@ -5,7 +5,12 @@
 namespace coverplayer::platform {
 
 SdlInput::SdlInput() {
+#ifdef __SWITCH__
+    // SDL uses positional A/B and X/Y; our UI uses Nintendo's printed labels.
+    swapFaceButtons_ = true;
+#else
     swapFaceButtons_ = std::getenv("COVERPLAYER_SWAP_FACE_BUTTONS") != nullptr;
+#endif
     for (int index = 0; index < SDL_NumJoysticks(); ++index) {
         if (SDL_IsGameController(index) == SDL_TRUE) {
             openController(index);
@@ -13,12 +18,16 @@ SdlInput::SdlInput() {
         }
     }
     SDL_EventState(SDL_DROPFILE, SDL_ENABLE);
+#ifndef __SWITCH__
     SDL_StartTextInput();
+#endif
 }
 
 SdlInput::~SdlInput() {
     closeController();
+#ifndef __SWITCH__
     SDL_StopTextInput();
+#endif
 }
 
 void SdlInput::openController(int deviceIndex) {

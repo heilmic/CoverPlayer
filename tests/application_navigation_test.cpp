@@ -6,6 +6,7 @@
 #include "coverplayer/platform/platform.hpp"
 
 #include <iostream>
+#include <functional>
 #include <optional>
 #include <utility>
 #include <vector>
@@ -15,6 +16,8 @@ public:
     std::vector<coverplayer::platform::InputActions> script;
     std::vector<coverplayer::platform::ViewModel> views;
     std::size_t cursor = 0;
+    std::function<void(std::size_t)> beforePoll;
+    std::vector<bool> pausedStates;
     std::string name() const override { return "test"; }
     bool bluetoothAvailable = false;
     coverplayer::platform::BluetoothState bluetooth{};
@@ -29,8 +32,8 @@ public:
     bool enterBackgroundPlayback(const std::vector<std::string>& trackPaths, std::size_t startIndex) override {
         ++enterBackgroundCalls; lastBackgroundTrackPaths = trackPaths; lastBackgroundStartIndex = startIndex; return backgroundSupported;
     }
-    coverplayer::platform::InputActions pollEvents() override { return cursor < script.size() ? script[cursor++] : coverplayer::platform::InputActions{true}; }
-    void setPlaybackStatus(bool, bool, double, double) override {}
+    coverplayer::platform::InputActions pollEvents() override { if (beforePoll) beforePoll(cursor); return cursor < script.size() ? script[cursor++] : coverplayer::platform::InputActions{true}; }
+    void setPlaybackStatus(bool, bool paused, double, double) override { pausedStates.push_back(paused); }
     void setView(coverplayer::platform::ViewModel view) override { views.push_back(std::move(view)); }
     void setSleepTimer(int) override {}
     void setPlayerDetails(int, std::size_t, std::string, std::optional<int>) override {}
@@ -49,14 +52,16 @@ public:
 class FakeAudio final : public coverplayer::audio::AudioPlayer {
 public:
     std::string opened;
-    bool open(const std::string& path) override { opened = path; return true; }
+    std::vector<std::string> opens;
+    bool finished = false;
+    bool open(const std::string& path) override { opened = path; opens.push_back(path); paused = false; finished = false; position = 0; return true; }
     void update() override {}
     void togglePause() override { paused = !paused; }
     void seekSeconds(double delta) override { position += delta; }
     void setVolumePercent(int percent) override { volume = percent; }
     bool isOpen() const noexcept override { return !opened.empty(); }
     bool isPaused() const noexcept override { return paused; }
-    bool isFinished() const noexcept override { return false; }
+    bool isFinished() const noexcept override { return finished; }
     double positionSeconds() const noexcept override { return position; }
     double durationSeconds() const noexcept override { return 3600; }
     int volumePercent() const noexcept override { return volume; }
@@ -70,12 +75,13 @@ private:
 class FakeProgress : public coverplayer::persistence::ProgressStore {
 public:
     std::string savedLanguage = "de";
+    std::vector<std::pair<std::string, coverplayer::persistence::TrackProgress>> saved;
     std::vector<coverplayer::persistence::MediaCollection> configured{{"Crime", "library/Crime"}};
     std::optional<coverplayer::persistence::TrackProgress> load(const std::string& path) override {
         if (path == "two-2.mp3") return coverplayer::persistence::TrackProgress{42.0, false};
         return std::nullopt;
     }
-    bool save(const std::string&, const coverplayer::persistence::TrackProgress&) override { return true; }
+    bool save(const std::string& path, const coverplayer::persistence::TrackProgress& progress) override { saved.emplace_back(path, progress); return true; }
     std::string lastMediaId() override { return {}; }
     std::string mediaRoot() override { return {}; }
     bool saveMediaRoot(const std::string&) override { return true; }
@@ -92,7 +98,7 @@ public:
     std::optional<std::vector<coverplayer::library::Collection>> load(const std::string&,std::uint64_t) override {
         return std::vector<coverplayer::library::Collection>{
             {"Book One", "library/Crime/Book One", "one.jpg", "", {{"Chapter 1", "one-1.mp3", "", "", 1}}},
-            {"Book Two", "library/Crime/Book Two", "two.jpg", "", {{"Chapter 1", "two-1.mp3", "", "", 1}, {"Chapter 2", "two-2.mp3", "", "", 2}}}
+            {"Book Two", "library/Crime/Book Two", "two.jpg", "", {{"Chapter 1", "two-1.mp3", "", "", 1, 0, "track-one.jpg"}, {"Chapter 2", "two-2.mp3", "", "", 2}}}
         };
     }
     bool save(const std::string&,std::uint64_t,const std::vector<coverplayer::library::Collection>&) override { return true; }
@@ -482,6 +488,76 @@ int main() {
     if (restartedPlatform.activeLanguage != coverplayer::Language::English) {
         std::cerr << "saved English language was not restored on restart\n";
         return 1;
+    }
+
+    // Browsing must not change the running track or reopen it on returning.
+    coverplayer::platform::InputActions previousRow; previousRow.navigate = -1;
+    FakePlatform browsePlatform; FakeAudio browseAudio; FakeProgress browseProgress;
+    browsePlatform.script = {nextCover, openBook, previousRow, play, rootBack, nextCover, previousRow, play, rootBack, nextCover, play, rootBack, rootBack, quit};
+    browsePlatform.beforePoll = [&](std::size_t frame) { if (frame == 4) browseAudio.seekSeconds(17); };
+    coverplayer::app::Application browseApp(browsePlatform, &browseAudio, &browseProgress, cache, fileSystem, "unused", "");
+    browseApp.run();
+    if (browseAudio.opens != std::vector<std::string>{"two-1.mp3", "two-2.mp3"} ||
+        browsePlatform.pausedStates[4] || browsePlatform.pausedStates[7] ||
+        !browsePlatform.pausedStates[12] || browseAudio.opened != "two-2.mp3") {
+        std::cerr << "album navigation interrupted or restarted playback\n"; return 1;
+    }
+    bool sawTrackCover = false, sawAlbumFallback = false, savedFirstPosition = false;
+    for (const auto& view : browsePlatform.views) if (view.screen == coverplayer::platform::Screen::Player) {
+        sawTrackCover |= view.coverPath == "track-one.jpg";
+        sawAlbumFallback |= view.coverPath == "two.jpg";
+    }
+    for (const auto& entry : browseProgress.saved)
+        savedFirstPosition |= entry.first == "two-1.mp3" && entry.second.positionSeconds == 17;
+    if (!sawTrackCover || !sawAlbumFallback || !savedFirstPosition) {
+        std::cerr << "title cover fallback or outgoing progress failed\n"; return 1;
+    }
+
+    // End-of-track follows the playing identity, even with a different row selected.
+    FakePlatform advancePlatform; FakeAudio advanceAudio; FakeProgress advanceProgress;
+    advancePlatform.script = {nextCover, openBook, previousRow, play, rootBack, nextCover, {}, play, quit};
+    advancePlatform.beforePoll = [&](std::size_t frame) { if (frame == 6) advanceAudio.finished = true; };
+    coverplayer::app::Application advanceApp(advancePlatform, &advanceAudio, &advanceProgress, cache, fileSystem, "unused", "");
+    advanceApp.run();
+    if (advanceAudio.opens != std::vector<std::string>{"two-1.mp3", "two-2.mp3"} ||
+        advancePlatform.views.back().screen != coverplayer::platform::Screen::Player) {
+        std::cerr << "automatic advance in title list skipped or reopened a track\n"; return 1;
+    }
+
+    // Automatic advance must preserve a deliberately different browsing selection.
+    FakePlatform selectionPlatform; FakeAudio selectionAudio; FakeProgress selectionProgress;
+    selectionPlatform.script = {nextCover, openBook, previousRow, play, rootBack, nextCover, {}, quit};
+    selectionPlatform.beforePoll = [&](std::size_t frame) { if (frame == 6) selectionAudio.finished = true; };
+    coverplayer::app::Application selectionApp(selectionPlatform, &selectionAudio, &selectionProgress, cache, fileSystem, "unused", "");
+    selectionApp.run();
+    if (selectionPlatform.views.back().screen != coverplayer::platform::Screen::Tracks ||
+        selectionPlatform.views.back().selected != 1 || selectionAudio.opened != "two-2.mp3") {
+        std::cerr << "automatic advance changed browsing context\n"; return 1;
+    }
+
+    // The last track ends in the list without wrapping or reopening the selection.
+    FakePlatform endPlatform; FakeAudio endAudio; FakeProgress endProgress;
+    endPlatform.script = {nextCover, openBook, play, rootBack, previousRow, {}, {}, {}, quit};
+    endPlatform.beforePoll = [&](std::size_t frame) { if (frame == 5) endAudio.finished = true; };
+    coverplayer::app::Application endApp(endPlatform, &endAudio, &endProgress, cache, fileSystem, "unused", "");
+    endApp.run();
+    if (endAudio.opens != std::vector<std::string>{"two-2.mp3"} ||
+        endPlatform.views.back().screen != coverplayer::platform::Screen::Tracks ||
+        endPlatform.views.back().selected != 0 || endProgress.saved.size() > 5) {
+        std::cerr << "end of album wrapped or changed selection\n"; return 1;
+    }
+
+    // Opening another row saves the outgoing track under its own media ID.
+    FakePlatform skipPlatform; FakeAudio skipAudio; FakeProgress skipProgress;
+    skipPlatform.script = {nextCover, openBook, previousRow, play, rootBack, nextCover, play, quit};
+    skipPlatform.beforePoll = [&](std::size_t frame) { if (frame == 4) skipAudio.seekSeconds(29); };
+    coverplayer::app::Application skipApp(skipPlatform, &skipAudio, &skipProgress, cache, fileSystem, "unused", "");
+    skipApp.run();
+    bool savedOutgoing = false;
+    for (const auto& entry : skipProgress.saved)
+        savedOutgoing |= entry.first == "two-1.mp3" && entry.second.positionSeconds == 29;
+    if (!savedOutgoing || skipAudio.opened != "two-2.mp3" || skipAudio.positionSeconds() != 42) {
+        std::cerr << "manual title switch lost progress or resume position\n"; return 1;
     }
     return 0;
 }

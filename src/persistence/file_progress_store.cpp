@@ -6,17 +6,27 @@
 #include <iomanip>
 #include <system_error>
 #include <sstream>
+#include <utility>
 
 namespace coverplayer::persistence {
+namespace {
+std::filesystem::path preferenceDirectory() {
+    char* path = SDL_GetPrefPath("CoverPlayer", "CoverPlayer");
+    if (!path) return {};
+    auto directory = std::filesystem::u8path(path);
+    SDL_free(path);
+    return directory;
+}
+}
 
-FileProgressStore::FileProgressStore() {
-    char* preferencePath = SDL_GetPrefPath("CoverPlayer", "CoverPlayer");
-    if (preferencePath == nullptr) {
+FileProgressStore::FileProgressStore() : FileProgressStore(preferenceDirectory()) {}
+
+FileProgressStore::FileProgressStore(std::filesystem::path stateDirectory)
+    : stateDirectory_(std::move(stateDirectory)) {
+    if (stateDirectory_.empty()) {
         error_ = std::string("Cannot determine state directory: ") + SDL_GetError();
         return;
     }
-    stateDirectory_ = std::filesystem::u8path(preferencePath);
-    SDL_free(preferencePath);
     progressFile_ = stateDirectory_ / "progress-v1.txt";
     collectionsFile_ = stateDirectory_ / "collections-v1.txt";
     namedCollectionsFile_ = stateDirectory_ / "collections-v2.txt";
@@ -79,8 +89,12 @@ std::vector<MediaCollection> FileProgressStore::collections() {
 bool FileProgressStore::saveCollections(const std::vector<MediaCollection>& collections) {
     std::error_code error;
     std::filesystem::create_directories(stateDirectory_, error);
-    if (error) return false;
-    const std::filesystem::path temporaryFile = namedCollectionsFile_.string() + ".tmp";
+    if (error) {
+        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Cannot create collection state directory '%s': %s", stateDirectory_.string().c_str(), error.message().c_str());
+        return false;
+    }
+    auto temporaryFile = namedCollectionsFile_;
+    temporaryFile += ".tmp";
     {
         std::ofstream output(temporaryFile, std::ios::trunc);
         for (const auto& collection : collections) {
@@ -88,7 +102,10 @@ bool FileProgressStore::saveCollections(const std::vector<MediaCollection>& coll
                 << std::quoted(collection.type) << '\n';
         }
         output.flush();
-        if (!output) return false;
+        if (!output) {
+            SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Cannot write collections to '%s'", temporaryFile.string().c_str());
+            return false;
+        }
     }
     std::filesystem::rename(temporaryFile, namedCollectionsFile_, error);
     if (error) {
@@ -96,6 +113,7 @@ bool FileProgressStore::saveCollections(const std::vector<MediaCollection>& coll
         error.clear();
         std::filesystem::rename(temporaryFile, namedCollectionsFile_, error);
     }
+    if (error) SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Cannot replace collections file '%s': %s", namedCollectionsFile_.string().c_str(), error.message().c_str());
     return !error;
 }
 std::vector<double> FileProgressStore::bookmarks(const std::string& mediaId) {
@@ -116,7 +134,8 @@ bool FileProgressStore::saveLanguage(const std::string& code) {
     std::error_code error;
     std::filesystem::create_directories(stateDirectory_, error);
     if (error) return false;
-    const auto temporaryFile = languageFile_.string() + ".tmp";
+    auto temporaryFile = languageFile_;
+    temporaryFile += ".tmp";
     {
         std::ofstream output(temporaryFile, std::ios::trunc);
         output << code << '\n';
@@ -172,7 +191,8 @@ bool FileProgressStore::writeFile() {
         error_ = "Cannot create state directory: " + filesystemError.message();
         return false;
     }
-    const std::filesystem::path temporaryFile = progressFile_.string() + ".tmp";
+    auto temporaryFile = progressFile_;
+    temporaryFile += ".tmp";
     {
         std::ofstream output(temporaryFile, std::ios::trunc);
         if (!output) {

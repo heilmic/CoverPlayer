@@ -1,0 +1,7 @@
+{
+  "host": "192.168.10.123",
+  "port": 5000,
+  "username": "anonymous",
+  "password": "",
+  "remotePath": "/switch/CoverPlayer/CoverPlayer.nro"
+}

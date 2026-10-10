@@ -27,7 +27,7 @@ int main() {
     tagged.metadataByPath["music/Album/b.mp3"]={true,"First","Artist","Tagged Album",1,""};
     tagged.metadataByPath["music/Album/bad.mp3"]={false};
     const auto taggedResult=coverplayer::library::LibraryScanner(tagged).scan("music");
-    if(taggedResult.size()!=1||taggedResult[0].name!="Album"||taggedResult[0].artist!="Artist"||taggedResult[0].coverPath!="embedded.jpg"||taggedResult[0].tracks.size()!=2||taggedResult[0].tracks[0].name!="First"){
+    if(taggedResult.size()!=1||taggedResult[0].name!="Album"||taggedResult[0].artist!="Artist"||taggedResult[0].coverPath!="embedded.jpg"||taggedResult[0].tracks.size()!=2||taggedResult[0].tracks[0].name!="First"||taggedResult[0].tracks[1].coverPath!="embedded.jpg"){
         std::cerr<<"metadata, embedded cover, or corrupt-file handling failed\n";return 1;
     }
     FakeFileSystem cyclic;

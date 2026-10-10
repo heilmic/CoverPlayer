@@ -82,3 +82,26 @@ without that driver, `coverplayer_renderer_cache_test --device` opens a real
 test window; run it from the app directory so fonts resolve. It exercises
 asynchronous loading, reuse, eviction, missing artwork and shutdown. The motion
 test checks rapid reversals and equivalent motion at different frame rates.
+
+## Platform build isolation
+
+Linux ARM64 (Knulli/muOS), Switch, desktop tests and Switch UI previews use
+`build/arm64-release`, `build/switch-alpha`, `build/desktop-debug` and
+`build/switch-preview` respectively. CMake includes only the selected platform
+adapter. The Switch UI is enabled only for the NRO and optional preview target;
+Linux retains its existing layout and dependencies.
+
+ARM64 packaging uses `build/staging-arm64` and cleans only its own unpacked
+outputs in `build/release`. It preserves Switch archives and unrelated files.
+Switch packaging also writes only its named outputs. Build each target once
+at a time; simultaneous builds of the same target share its cache/output files.
+
+See the [Switch build and FTP guide](../switch.md). FTP credentials are stored
+only in the ignored `scripts/deploy-switch.local.json` file.
+
+For an explicitly requested update to an existing release, keep its historical
+Git tag unchanged. Publish the refreshed packages with release notes linking
+the exact update commit and a matching source archive; the automatically
+provided GitHub tag archives still describe the original tag. Include hashes
+for the refreshed downloads. Switch alpha assets remain labeled experimental
+inside a stable Knulli/muOS release.

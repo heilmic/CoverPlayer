@@ -11,6 +11,7 @@ namespace coverplayer::persistence {
 class FileProgressStore final : public ProgressStore {
 public:
     FileProgressStore();
+    explicit FileProgressStore(std::filesystem::path stateDirectory);
 
     [[nodiscard]] std::optional<TrackProgress> load(const std::string& mediaId) override;
     bool save(const std::string& mediaId, const TrackProgress& progress) override;

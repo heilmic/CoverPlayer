@@ -5,14 +5,24 @@ $ErrorActionPreference = 'Stop'
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
 $buildRoot = Join-Path $repositoryRoot 'build'
 $binary = Join-Path $buildRoot 'arm64-release/coverplayer'
-$stagingRoot = Join-Path $buildRoot 'staging'
+$stagingRoot = Join-Path $buildRoot 'staging-arm64'
 $releaseRoot = Join-Path $buildRoot 'release'
 
 & "$PSScriptRoot/Build-Arm64.ps1"
 if (!(Test-Path -LiteralPath $binary)) { throw 'ARM64 binary is missing.' }
 
-if (Test-Path -LiteralPath $stagingRoot) { Remove-Item -LiteralPath $stagingRoot -Recurse -Force }
-if (Test-Path -LiteralPath $releaseRoot) { Remove-Item -LiteralPath $releaseRoot -Recurse -Force }
+# Never clear the shared release directory: it also contains Switch packages.
+$allowedBuildRoot = [IO.Path]::GetFullPath($buildRoot).TrimEnd('\','/') + [IO.Path]::DirectorySeparatorChar
+foreach ($ownedOutput in @($stagingRoot,
+    (Join-Path $releaseRoot 'CoverPlayer-Knulli'),
+    (Join-Path $releaseRoot 'CoverPlayer-Knulli-Test'),
+    (Join-Path $releaseRoot 'CoverPlayer-muOS'))) {
+    $resolvedOutput = [IO.Path]::GetFullPath($ownedOutput)
+    if (!$resolvedOutput.StartsWith($allowedBuildRoot, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "Package cleanup escaped the build directory: $resolvedOutput"
+    }
+    if (Test-Path -LiteralPath $resolvedOutput) { Remove-Item -LiteralPath $resolvedOutput -Recurse -Force }
+}
 New-Item -ItemType Directory -Force -Path $stagingRoot,$releaseRoot | Out-Null
 
 function Copy-AppPayload([string]$destination) {
@@ -56,7 +66,7 @@ function Invoke-RuntimeCollection([string]$destination, [string]$licenseDestinat
 # Debian's SDL2 requires /dev/dri; Debian's libasound searches for the
 # PipeWire module in /usr/lib/aarch64-linux-gnu/alsa-lib instead of muOS's
 # /usr/lib/alsa-lib, so neither library can be bundled on muOS.
-Invoke-RuntimeCollection '/work/build/staging/runtime-muos' '/work/build/staging/muos/CoverPlayer/licenses' 'libSDL2-2.0.so.0 libSDL2_image-2.0.so.0 libSDL2_ttf-2.0.so.0 libasound.so.2'
+Invoke-RuntimeCollection '/work/build/staging-arm64/runtime-muos' '/work/build/staging-arm64/muos/CoverPlayer/licenses' 'libSDL2-2.0.so.0 libSDL2_image-2.0.so.0 libSDL2_ttf-2.0.so.0 libasound.so.2'
 Copy-Item -Path "$stagingRoot/runtime-muos/*" -Destination "$muosApp/libs"
 foreach ($name in @('libSDL2-2.0.so.0','libSDL2_image-2.0.so.0','libSDL2_ttf-2.0.so.0','libasound.so.2')) {
     if (Test-Path -LiteralPath (Join-Path "$muosApp/libs" $name)) {
@@ -76,7 +86,7 @@ foreach ($name in @('libSDL2-2.0.so.0','libSDL2_image-2.0.so.0','libSDL2_ttf-2.0
 # `bluetoothctl` binaries, not their libraries), so none of it is actually
 # missing on Knulli - it was only ever there because the desktop Debian
 # SDL2 build pulls it in.
-Invoke-RuntimeCollection '/work/build/staging/runtime-knulli' '/work/build/staging/knulli/roms/ports/CoverPlayer-Test/licenses' 'libSDL2-2.0.so.0 libasound.so.2'
+Invoke-RuntimeCollection '/work/build/staging-arm64/runtime-knulli' '/work/build/staging-arm64/knulli/roms/ports/CoverPlayer-Test/licenses' 'libSDL2-2.0.so.0 libasound.so.2'
 Copy-Item -Path "$stagingRoot/runtime-knulli/*" -Destination "$knulliApp/libs"
 Copy-Item -Path "$stagingRoot/runtime-knulli/*" -Destination "$knulliProductionApp/libs"
 Copy-Item -Path "$knulliApp/licenses/*" -Destination "$knulliProductionApp/licenses" -Recurse -Force

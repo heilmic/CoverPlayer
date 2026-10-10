@@ -58,6 +58,9 @@ private:
     };
 
     void renderHandheldUi();
+#ifdef COVERPLAYER_SWITCH_UI
+    void renderSwitchUi();
+#endif
     void renderCoverFlow();
     void drawCover(int x, int y, int width, int height);
     void drawCoverTexture(SDL_Texture* texture, int x, int y, int width, int height, Uint8 brightness = 255, double angle = 0.0);

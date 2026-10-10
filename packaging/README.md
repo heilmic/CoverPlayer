@@ -63,3 +63,18 @@ paired devices. Bluetooth management is unavailable on muOS.
 
 See the repository's `docs/README.md` for architecture, compatibility and
 recovery limitations. License: `LICENSE`; dependencies: `THIRD_PARTY_NOTICES.md`.
+
+## Album playback and artwork
+
+B from the player returns to the album track list without pausing. Browsing the
+list leaves the running track unchanged; A selects another track or returns to
+the current track without restarting it. B again leaves the album, pauses and
+saves progress. A one-track album returns directly to the album browser and pauses.
+Up/Down in the player selects the previous/next track, without wrapping.
+
+The player prefers the current track's embedded cover, then the album/folder
+cover, then a placeholder. Album browsing continues to prefer folder artwork.
+Collection management shows X/Delete in the footer; A confirms removal, B cancels.
+Media files are retained, and the last collection cannot be removed.
+
+For Nintendo Switch, use the [separate NRO package and guide](https://github.com/heilmic/CoverPlayer/blob/main/docs/switch.md).

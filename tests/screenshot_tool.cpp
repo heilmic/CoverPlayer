@@ -238,6 +238,32 @@ int main(int argc, char** argv) {
     renderer.setPlaybackStatus(true, false, 843.0, 1860.0);
     renderer.setPlayerDetails(45, 3, {}, 76);
     if (!render(renderer, longPlayer, (output / "14-long-player.bmp").u8string())) return 1;
+    auto manager = collections;
+    manager.screen = coverplayer::platform::Screen::CollectionManager;
+    manager.title = demo("SAMMLUNGEN VERWALTEN", "MANAGE COLLECTIONS");
+    if (!render(renderer, manager, (output / "18-collection-manager.bmp").u8string())) return 1;
+#ifdef COVERPLAYER_SWITCH_UI
+    coverplayer::platform::ViewModel editor;
+    editor.screen = coverplayer::platform::Screen::CollectionName;
+    editor.subtitle = demo("Meine Musik & Hoerbuecher", "My music & audiobooks");
+    editor.message = demo("Y speichert die Sammlung", "Y saves the collection");
+    editor.selected = 65;
+    for (const char c : std::string("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 -_&."))
+        editor.items.emplace_back(1, c);
+    if (!render(renderer, editor, (output / "15-name-editor.bmp").u8string())) return 1;
+    auto folders = editor;
+    folders.screen = coverplayer::platform::Screen::Folders;
+    folders.title = "sdmc:/media/";
+    folders.message = demo("Diesen Ordner mit Y auswaehlen", "Select this folder with Y");
+    folders.items = {"..", "Audiobooks", "Music", "Podcasts", "A very long folder name with albums and compilations", "Recordings", "Soundtracks", "Various Artists", "Voice notes", "New collection"};
+    folders.selected = 9;
+    if (!render(renderer, folders, (output / "16-folders.bmp").u8string())) return 1;
+    auto manyCollections = collections;
+    for (int i = 0; i < 8; ++i) manyCollections.items.push_back(demo("Weitere Sammlung|MUSIK  24 MEDIEN", "Another collection|MUSIC  24 ALBUMS"));
+    manyCollections.selected = manyCollections.items.size() - 1;
+    manyCollections.message = demo("Bibliothek aktualisiert", "Library updated");
+    if (!render(renderer, manyCollections, (output / "17-many-collections.bmp").u8string())) return 1;
+#endif
     if (argc == 5) {
         if (std::string(argv[4]) != "--animation") return 2;
         const auto frames = output / "animation";

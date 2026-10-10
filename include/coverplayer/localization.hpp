@@ -79,6 +79,8 @@ inline const char* tr(Language language, const char* source) {
         {"B / SELECT SCHLIESSEN", "B / SELECT CLOSE"},
         {"START+SELECT  App beenden (Hilfe zu)", "START+SELECT  Exit app (close help first)"},
         {"A OEFFNEN   Y VERWALTEN   X SCANNEN", "A OPEN   Y MANAGE   X SCAN"},
+        {"A PAUSE   OBEN/UNTEN TITEL   B ZURUECK", "A PAUSE   UP/DOWN TRACK   B BACK"},
+        {"A EDIT   Y PFAD   X LOESCHEN", "A EDIT   Y PATH   X DELETE"},
         {"A PLAY/PAUSE   B ZURUECK", "A PLAY/PAUSE   B BACK"},
         {"START KURZ SLEEP / LANG HINTERGRUND", "TAP START SLEEP / HOLD FOR BACKGROUND"},
         {"A OEFFNEN   Y ORDNER WAEHLEN", "A OPEN   Y SELECT FOLDER"},

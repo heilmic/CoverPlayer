@@ -8,11 +8,17 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 option(COVERPLAYER_BUILD_TESTS "Build CoverPlayer tests" ON)
 option(COVERPLAYER_BUNDLE_WINDOWS_RUNTIME "Copy MinGW runtime DLLs beside the executable" ON)
+option(COVERPLAYER_BUILD_SWITCH_PREVIEW "Build the desktop Switch-layout screenshot tool" OFF)
 
 include(CTest)
 
 find_package(PkgConfig REQUIRED)
 find_package(Threads REQUIRED)
+if(NINTENDO_SWITCH)
+    # Switch libraries are static; include their private link dependencies.
+    set(PKG_CONFIG_ARGN --static)
+    set(COVERPLAYER_BUILD_TESTS OFF)
+endif()
 pkg_check_modules(SDL2 REQUIRED IMPORTED_TARGET sdl2)
 pkg_check_modules(SDL2_TTF REQUIRED IMPORTED_TARGET SDL2_ttf)
 pkg_check_modules(SDL2_IMAGE REQUIRED IMPORTED_TARGET SDL2_image)
@@ -53,6 +59,10 @@ if(BUILD_TESTING AND COVERPLAYER_BUILD_TESTS)
     target_include_directories(coverplayer_library_cache_test PRIVATE include src)
     target_link_libraries(coverplayer_library_cache_test PRIVATE PkgConfig::SDL2)
     add_test(NAME library_cache COMMAND coverplayer_library_cache_test)
+    add_executable(coverplayer_progress_store_test tests/file_progress_store_test.cpp src/persistence/file_progress_store.cpp)
+    target_include_directories(coverplayer_progress_store_test PRIVATE include src)
+    target_link_libraries(coverplayer_progress_store_test PRIVATE PkgConfig::SDL2)
+    add_test(NAME progress_store COMMAND coverplayer_progress_store_test)
     add_executable(coverplayer_cover_flow_motion_test tests/cover_flow_motion_test.cpp)
     target_include_directories(coverplayer_cover_flow_motion_test PRIVATE src)
     add_test(NAME cover_flow_motion COMMAND coverplayer_cover_flow_motion_test)
@@ -109,22 +119,35 @@ if(BUILD_TESTING AND COVERPLAYER_BUILD_TESTS)
     target_link_libraries(coverplayer_screenshot_tool PRIVATE Threads::Threads PkgConfig::SDL2 PkgConfig::SDL2_TTF PkgConfig::SDL2_IMAGE)
 endif()
 
+if(NINTENDO_SWITCH)
+    set(COVERPLAYER_PLATFORM_SOURCES
+        src/platform/switch/switch_main.cpp
+        src/platform/switch/switch_platform.cpp
+        src/platform/switch/switch_renderer.cpp)
+else()
+    set(COVERPLAYER_PLATFORM_SOURCES
+        src/main.cpp
+        src/platform/sdl/playback_power.cpp
+        src/platform/sdl/sdl_platform.cpp
+        src/platform/sdl/linux_audio_system.cpp
+        src/platform/sdl/audio_ducker.cpp
+        src/platform/sdl/linux_background_session.cpp
+        src/platform/sdl/linux_battery.cpp)
+endif()
+
 add_executable(coverplayer
-    src/main.cpp
+    ${COVERPLAYER_PLATFORM_SOURCES}
     src/audio/mpg123_sdl_player.cpp
     src/persistence/file_progress_store.cpp
     src/persistence/file_library_cache.cpp
-    src/platform/sdl/playback_power.cpp
-    src/platform/sdl/sdl_platform.cpp
     src/platform/sdl/sdl_renderer.cpp
     src/platform/sdl/sdl_input.cpp
-    src/platform/sdl/linux_audio_system.cpp
-    src/platform/sdl/audio_ducker.cpp
-    src/platform/sdl/linux_background_session.cpp
-    src/platform/sdl/linux_battery.cpp
     src/platform/native_file_system.cpp
 )
 target_include_directories(coverplayer PRIVATE include src)
+if(NINTENDO_SWITCH)
+    target_compile_definitions(coverplayer PRIVATE COVERPLAYER_SWITCH_UI=1)
+endif()
 if(MSVC)
     target_compile_options(coverplayer PRIVATE /W4 /permissive-)
 else()
@@ -149,6 +172,28 @@ add_custom_command(TARGET coverplayer POST_BUILD
 )
 
 install(TARGETS coverplayer RUNTIME DESTINATION bin)
+
+if(COVERPLAYER_BUILD_SWITCH_PREVIEW AND NOT NINTENDO_SWITCH)
+    add_executable(coverplayer_switch_preview tests/screenshot_tool.cpp
+        src/platform/sdl/sdl_renderer.cpp src/platform/switch/switch_renderer.cpp)
+    target_include_directories(coverplayer_switch_preview PRIVATE include src)
+    target_compile_definitions(coverplayer_switch_preview PRIVATE COVERPLAYER_SWITCH_UI=1)
+    target_link_libraries(coverplayer_switch_preview PRIVATE Threads::Threads
+        PkgConfig::SDL2 PkgConfig::SDL2_TTF PkgConfig::SDL2_IMAGE)
+endif()
+
+if(NINTENDO_SWITCH)
+    set(COVERPLAYER_ROMFS "${CMAKE_CURRENT_BINARY_DIR}/romfs")
+    file(MAKE_DIRECTORY "${COVERPLAYER_ROMFS}/assets/fonts")
+    configure_file(assets/fonts/RobotoMono-Bold.ttf
+        "${COVERPLAYER_ROMFS}/assets/fonts/RobotoMono-Bold.ttf" COPYONLY)
+    nx_generate_nacp(OUTPUT CoverPlayer.nacp NAME "CoverPlayer"
+        AUTHOR "heilmic" VERSION "${PROJECT_VERSION}-sw-a5")
+    nx_create_nro(coverplayer OUTPUT CoverPlayer.nro
+        NACP "${CMAKE_CURRENT_BINARY_DIR}/CoverPlayer.nacp"
+        ICON "${CMAKE_CURRENT_SOURCE_DIR}/packaging/switch/icon.jpg"
+        ROMFS "${COVERPLAYER_ROMFS}")
+endif()
 
 if(WIN32 AND COVERPLAYER_BUNDLE_WINDOWS_RUNTIME)
     get_filename_component(COVERPLAYER_RUNTIME_DIRECTORY "${CMAKE_CXX_COMPILER}" DIRECTORY)

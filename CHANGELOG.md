@@ -8,8 +8,32 @@ Knulli is the primary platform, with muOS packages also available.
 
 Packaging addendum: `CoverPlayer-Knulli-Category.zip` is a complete alternative
 Knulli download with a dedicated main-menu category, illustrated setup guide
-and optional Art Book Next SVG player icon. It reuses the unchanged 1.0.0
-regular app and saved data. [Setup and screenshots](docs/knulli-category.md).
+and optional Art Book Next SVG player icon. It reuses the regular app payload
+and saved data. [Setup and screenshots](docs/knulli-category.md).
+
+### October 10 update: Switch alpha and album playback
+
+The v1.0.0 release assets have been refreshed from the update commit linked in
+the GitHub release notes. The original v1.0.0 Git tag remains unchanged.
+
+- Returning to an album track list keeps playback and automatic next-track
+  playback running. Leaving the album pauses and saves. Selecting the running
+  track does not restart it; browsing selection is independent of playback.
+- The player prefers embedded artwork from the current track and falls back to
+  the album cover. Library cache v5 rebuilds older indexes automatically;
+  collections and playback progress are preserved.
+- Collection management shows X/Delete directly; the player shows Up/Down
+  track switching. Knulli/muOS retain VOL and their existing compact layout.
+- **Experimental Switch alpha 5:** standalone NRO, writable SD state/cache,
+  Nintendo button mapping, embedded font/icon, dedicated 1280 × 720 interface
+  and verified FTP deployment. Basic collections/playback are user-confirmed;
+  Lite, docking and extended lifecycle validation remain pending. No audio
+  sysmodule or Tesla/Ultrahand overlay is bundled.
+- Separate build caches and platform-specific package cleanup prevent ARM64
+  packaging from removing Switch outputs. Eleven desktop regression tests pass,
+  with native ARM64 and Switch cross-builds and package checks.
+
+[Switch installation and preview](docs/switch.md).
 
 ### Highlights
 
