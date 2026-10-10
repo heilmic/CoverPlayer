@@ -779,7 +779,8 @@ void SdlRenderer::renderHandheldUi() {
         SDL_SetRenderDrawColor(renderer_,51,61,73,255);
         SDL_RenderDrawLine(renderer_,44,145,uiWidth_-44,145);
         std::array<HelpRow,7> rows{};
-        const char* note = nullptr;
+        const char* note = view_.screen == Screen::Player ? "Linker Stick = Steuerkreuz"
+            : "Kreuz / linker Stick: halten = schneller";
         switch (view_.screen) {
             case Screen::Player: rows={{{"A","Wiedergabe / Pause"},{"LINKS/RECHTS","10 Sek. spulen"},{"L1/R1","30 Sek. spulen"},{"OBEN/UNTEN","Titel wechseln"},{"Y / X","Lesezeichen setzen / naechstes"},{"START KURZ","Sleep-Timer"},{"START 2s","Hintergrundwiedergabe"}}}; break;
             case Screen::Collections: rows={{{"A","Sammlung oeffnen"},{"STEUERKREUZ","Sammlung waehlen"},{"Y","Sammlungen verwalten"},{"X","Bibliothek scannen"},{"B","App bleibt geoeffnet"}}}; break;

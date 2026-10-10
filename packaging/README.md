@@ -17,6 +17,10 @@ cache live outside the installation folder. Keep them and your media when updati
 
 ## Controls
 
+The left analog stick works like the D-pad. Hold either (or keyboard arrows)
+to scroll: repeat begins after 330 ms and accelerates after 1.2 seconds. Release
+or center the stick to stop. Player seek/track actions stay single-step.
+
 | Button | Action |
 | --- | --- |
 | A | Open selection; pause/resume on the player |
@@ -50,9 +54,9 @@ paired devices. Bluetooth management is unavailable on muOS.
 
 - Knulli logs: `/userdata/system/logs/coverplayer.log` or `coverplayer-test.log`.
 - muOS log: `MUOS/log/coverplayer.log` on application storage.
-- Knulli ducking: `COVERPLAYER_DUCK_PERCENT=50` by default (0â€“100);
+- Knulli ducking: `COVERPLAYER_DUCK_PERCENT=50` by default (0–100);
   `COVERPLAYER_AUDIO_DUCKING=0` disables it. Direct ALSA streams are outside it.
-- `COVERPLAYER_DIM_SECONDS` sets the foreground dim timeout (1â€“3600 seconds).
+- `COVERPLAYER_DIM_SECONDS` sets the foreground dim timeout (1–3600 seconds).
 - Intermittent Bluetooth audio stutter is under investigation; a clean audio
   log does not rule it out.
 

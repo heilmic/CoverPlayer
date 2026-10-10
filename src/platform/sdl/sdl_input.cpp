@@ -38,13 +38,59 @@ void SdlInput::closeController() {
         controller_ = nullptr;
     }
     controllerInstanceId_ = -1;
+    clearDirections();
     startHeld_ = false;
     startLongPressTriggered_ = false;
 }
 
-InputActions SdlInput::poll(Screen currentScreen, bool bluetoothEnabled, bool wakeOnly) {
+void SdlInput::clearDirections() {
+    keyboardDirections_ = padDirections_ = 0;
+    stickX_ = stickY_ = 0;
+    stickDirection_ = heldDirection_ = Direction::None;
+}
+
+SdlInput::Direction SdlInput::direction() const {
+    const unsigned buttons = keyboardDirections_ | padDirections_;
+    // Opposite directions cancel, and physical buttons take precedence over the stick.
+    if (buttons) {
+        const int x = int(bool(buttons & 2)) - int(bool(buttons & 1));
+        const int y = int(bool(buttons & 8)) - int(bool(buttons & 4));
+        if (x) return x < 0 ? Direction::Left : Direction::Right;
+        if (y) return y < 0 ? Direction::Up : Direction::Down;
+        return Direction::None;
+    }
+    return stickDirection_;
+}
+
+void SdlInput::applyDirection(InputActions& actions, Screen screen, Direction value) {
+    if (value == Direction::None) return;
+    const int sign = value == Direction::Left || value == Direction::Up ? -1 : 1;
+    if (screen == Screen::Player) {
+        if (value == Direction::Left || value == Direction::Right) actions.seekSeconds = sign * 10;
+        else actions.changeTrack = sign;
+    } else {
+        actions.navigate = sign * (screen == Screen::CollectionName &&
+            (value == Direction::Up || value == Direction::Down) ? 10 : 1);
+    }
+}
+
+void SdlInput::updateDirection(InputActions& actions, Screen screen, Uint32 now) {
+    const auto value = direction();
+    if (value == Direction::None) directionBlocked_ = false;
+    if (value != heldDirection_) {
+        heldDirection_ = value;
+        directionHeldAt_ = directionRepeatedAt_ = now;
+        if (!directionBlocked_ && !helpVisible_) applyDirection(actions, screen, value);
+    }
+}
+
+InputActions SdlInput::poll(Screen currentScreen, bool bluetoothEnabled, bool wakeOnly, Uint32 now) {
     InputActions actions{};
     hadActivity_ = false;
+    if (wakeOnly || helpVisible_ || (hasScreen_ && previousScreen_ != currentScreen))
+        directionBlocked_ = direction() != Direction::None;
+    previousScreen_ = currentScreen;
+    hasScreen_ = true;
     SDL_Event event{};
     while (SDL_PollEvent(&event) != 0) {
         const bool activity = event.type == SDL_KEYDOWN || event.type == SDL_CONTROLLERBUTTONDOWN ||
@@ -52,6 +98,52 @@ InputActions SdlInput::poll(Screen currentScreen, bool bluetoothEnabled, bool wa
             (event.type == SDL_CONTROLLERAXISMOTION && std::abs(int(event.caxis.value)) > 16000) ||
             (event.type == SDL_JOYHATMOTION && event.jhat.value != SDL_HAT_CENTERED);
         hadActivity_ = hadActivity_ || activity;
+        if (event.type == SDL_APP_WILLENTERBACKGROUND ||
+            (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_FOCUS_LOST)) {
+            clearDirections();
+        }
+        bool directionalEvent = false;
+        if (event.type == SDL_KEYDOWN || event.type == SDL_KEYUP) {
+            unsigned bit = 0;
+            switch (event.key.keysym.sym) {
+            case SDLK_LEFT: bit = 1; break; case SDLK_RIGHT: bit = 2; break;
+            case SDLK_UP: bit = 4; break; case SDLK_DOWN: bit = 8; break;
+            default: break;
+            }
+            if (bit) {
+                directionalEvent = true;
+                if (event.type == SDL_KEYUP) keyboardDirections_ &= ~bit;
+                else if (!event.key.repeat) keyboardDirections_ |= bit;
+            }
+        }
+        if (event.type == SDL_CONTROLLERBUTTONDOWN || event.type == SDL_CONTROLLERBUTTONUP) {
+            unsigned bit = 0;
+            switch (event.cbutton.button) {
+            case SDL_CONTROLLER_BUTTON_DPAD_LEFT: bit = 1; break;
+            case SDL_CONTROLLER_BUTTON_DPAD_RIGHT: bit = 2; break;
+            case SDL_CONTROLLER_BUTTON_DPAD_UP: bit = 4; break;
+            case SDL_CONTROLLER_BUTTON_DPAD_DOWN: bit = 8; break;
+            default: break;
+            }
+            if (bit) {
+                directionalEvent = true;
+                if (controller_ && event.cbutton.which != controllerInstanceId_) continue;
+                if (event.type == SDL_CONTROLLERBUTTONUP) padDirections_ &= ~bit;
+                else padDirections_ |= bit;
+            }
+        }
+        if (event.type == SDL_CONTROLLERAXISMOTION &&
+            (event.caxis.axis == SDL_CONTROLLER_AXIS_LEFTX || event.caxis.axis == SDL_CONTROLLER_AXIS_LEFTY)) {
+            if (controller_ && event.caxis.which != controllerInstanceId_) continue;
+            if (event.caxis.axis == SDL_CONTROLLER_AXIS_LEFTX) stickX_ = event.caxis.value;
+            else stickY_ = event.caxis.value;
+            continue; // Evaluate both axes together after draining the event queue.
+        }
+        if (directionalEvent) {
+            if (wakeOnly || helpVisible_) directionBlocked_ = direction() != Direction::None;
+            updateDirection(actions, currentScreen, now);
+            continue;
+        }
         if (wakeOnly && (activity || event.type == SDL_KEYUP || event.type == SDL_CONTROLLERBUTTONUP ||
             event.type == SDL_JOYBUTTONUP || event.type == SDL_TEXTINPUT)) {
             startHeld_ = false;
@@ -80,10 +172,6 @@ InputActions SdlInput::poll(Screen currentScreen, bool bluetoothEnabled, bool wa
                 else if (event.key.keysym.sym == SDLK_BACKSPACE) actions.eraseText = true;
                 else if (event.key.keysym.sym == SDLK_DELETE) actions.clearText = true;
                 else if (event.key.keysym.sym == SDLK_RETURN) actions.saveText = true;
-                else if (event.key.keysym.sym == SDLK_LEFT) actions.navigate = -1;
-                else if (event.key.keysym.sym == SDLK_RIGHT) actions.navigate = 1;
-                else if (event.key.keysym.sym == SDLK_UP) actions.navigate = -10;
-                else if (event.key.keysym.sym == SDLK_DOWN) actions.navigate = 10;
                 continue;
             }
             if (currentScreen == Screen::CollectionManager) {
@@ -93,8 +181,6 @@ InputActions SdlInput::poll(Screen currentScreen, bool bluetoothEnabled, bool wa
                 else if (event.key.keysym.sym == SDLK_DELETE || event.key.keysym.sym == SDLK_x) actions.deleteItem = true;
                 else if (event.key.keysym.sym == SDLK_PAGEUP) actions.reorder = -1;
                 else if (event.key.keysym.sym == SDLK_PAGEDOWN) actions.reorder = 1;
-                else if (event.key.keysym.sym == SDLK_UP || event.key.keysym.sym == SDLK_LEFT) actions.navigate = -1;
-                else if (event.key.keysym.sym == SDLK_DOWN || event.key.keysym.sym == SDLK_RIGHT) actions.navigate = 1;
                 continue;
             }
             if (currentScreen == Screen::Bluetooth) {
@@ -102,8 +188,6 @@ InputActions SdlInput::poll(Screen currentScreen, bool bluetoothEnabled, bool wa
                 else if (event.key.keysym.sym == SDLK_RETURN) actions.accept = true;
                 else if (event.key.keysym.sym == SDLK_x) actions.toggleBluetooth = true;
                 else if (event.key.keysym.sym == SDLK_y || event.key.keysym.sym == SDLK_r) actions.refreshBluetooth = true;
-                else if (event.key.keysym.sym == SDLK_UP || event.key.keysym.sym == SDLK_LEFT) actions.navigate = -1;
-                else if (event.key.keysym.sym == SDLK_DOWN || event.key.keysym.sym == SDLK_RIGHT) actions.navigate = 1;
                 continue;
             }
             if (event.key.keysym.sym == SDLK_q) actions.quit = true;
@@ -118,8 +202,7 @@ InputActions SdlInput::poll(Screen currentScreen, bool bluetoothEnabled, bool wa
                 (currentScreen == Screen::CoverFlow || currentScreen == Screen::AlbumList)) actions.toggleLibraryView = true;
             if (event.key.keysym.sym == SDLK_MINUS) actions.volumeDelta = -5;
             if (event.key.keysym.sym == SDLK_PLUS || event.key.keysym.sym == SDLK_EQUALS) actions.volumeDelta = 5;
-            if (currentScreen == Screen::Player) { if (event.key.keysym.sym == SDLK_SPACE) actions.togglePause=true;if(event.key.keysym.sym==SDLK_LEFT)actions.seekSeconds=-10;if(event.key.keysym.sym==SDLK_RIGHT)actions.seekSeconds=10;if(event.key.keysym.sym==SDLK_UP)actions.changeTrack=-1;if(event.key.keysym.sym==SDLK_DOWN)actions.changeTrack=1; }
-            else { if(event.key.keysym.sym==SDLK_UP||event.key.keysym.sym==SDLK_LEFT)actions.navigate=-1;if(event.key.keysym.sym==SDLK_DOWN||event.key.keysym.sym==SDLK_RIGHT)actions.navigate=1; }
+            if (currentScreen == Screen::Player && event.key.keysym.sym == SDLK_SPACE) actions.togglePause = true;
         }
         if (event.type == SDL_CONTROLLERBUTTONDOWN) {
             auto button=static_cast<SDL_GameControllerButton>(event.cbutton.button);
@@ -133,7 +216,7 @@ InputActions SdlInput::poll(Screen currentScreen, bool bluetoothEnabled, bool wa
             if (button == SDL_CONTROLLER_BUTTON_START) {
                 startHeld_ = true;
                 startLongPressTriggered_ = false;
-                startPressedAt_ = SDL_GetTicks();
+                startPressedAt_ = now;
                 if (controller_ != nullptr && SDL_GameControllerGetButton(controller_, SDL_CONTROLLER_BUTTON_BACK)) actions.quit = true;
             }
             if (button == SDL_CONTROLLER_BUTTON_BACK) {
@@ -148,14 +231,10 @@ InputActions SdlInput::poll(Screen currentScreen, bool bluetoothEnabled, bool wa
                 else if (button == SDL_CONTROLLER_BUTTON_Y) actions.saveText = true;
                 else if (button == SDL_CONTROLLER_BUTTON_LEFTSHOULDER) actions.clearText = true;
                 else if (button == SDL_CONTROLLER_BUTTON_RIGHTSHOULDER) actions.navigate = 10;
-                else if (button == SDL_CONTROLLER_BUTTON_DPAD_LEFT) actions.navigate = -1;
-                else if (button == SDL_CONTROLLER_BUTTON_DPAD_RIGHT) actions.navigate = 1;
-                else if (button == SDL_CONTROLLER_BUTTON_DPAD_UP) actions.navigate = -10;
-                else if (button == SDL_CONTROLLER_BUTTON_DPAD_DOWN) actions.navigate = 10;
                 continue;
             }
-            if(currentScreen==Screen::CollectionManager){if(button==SDL_CONTROLLER_BUTTON_B)actions.back=true;else if(button==SDL_CONTROLLER_BUTTON_A)actions.accept=true;else if(button==SDL_CONTROLLER_BUTTON_Y)actions.openFolders=true;else if(button==SDL_CONTROLLER_BUTTON_X)actions.deleteItem=true;else if(button==SDL_CONTROLLER_BUTTON_LEFTSHOULDER)actions.reorder=-1;else if(button==SDL_CONTROLLER_BUTTON_RIGHTSHOULDER)actions.reorder=1;else if(button==SDL_CONTROLLER_BUTTON_DPAD_UP||button==SDL_CONTROLLER_BUTTON_DPAD_LEFT)actions.navigate=-1;else if(button==SDL_CONTROLLER_BUTTON_DPAD_DOWN||button==SDL_CONTROLLER_BUTTON_DPAD_RIGHT)actions.navigate=1;continue;}
-            if(currentScreen==Screen::Bluetooth){if(button==SDL_CONTROLLER_BUTTON_B)actions.back=true;else if(button==SDL_CONTROLLER_BUTTON_A)actions.accept=true;else if(button==SDL_CONTROLLER_BUTTON_X)actions.toggleBluetooth=true;else if(button==SDL_CONTROLLER_BUTTON_Y)actions.refreshBluetooth=true;else if(button==SDL_CONTROLLER_BUTTON_DPAD_UP||button==SDL_CONTROLLER_BUTTON_DPAD_LEFT)actions.navigate=-1;else if(button==SDL_CONTROLLER_BUTTON_DPAD_DOWN||button==SDL_CONTROLLER_BUTTON_DPAD_RIGHT)actions.navigate=1;continue;}
+            if(currentScreen==Screen::CollectionManager){if(button==SDL_CONTROLLER_BUTTON_B)actions.back=true;else if(button==SDL_CONTROLLER_BUTTON_A)actions.accept=true;else if(button==SDL_CONTROLLER_BUTTON_Y)actions.openFolders=true;else if(button==SDL_CONTROLLER_BUTTON_X)actions.deleteItem=true;else if(button==SDL_CONTROLLER_BUTTON_LEFTSHOULDER)actions.reorder=-1;else if(button==SDL_CONTROLLER_BUTTON_RIGHTSHOULDER)actions.reorder=1;continue;}
+            if(currentScreen==Screen::Bluetooth){if(button==SDL_CONTROLLER_BUTTON_B)actions.back=true;else if(button==SDL_CONTROLLER_BUTTON_A)actions.accept=true;else if(button==SDL_CONTROLLER_BUTTON_X)actions.toggleBluetooth=true;else if(button==SDL_CONTROLLER_BUTTON_Y)actions.refreshBluetooth=true;continue;}
             if(button==SDL_CONTROLLER_BUTTON_B)actions.back=true;
             if(currentScreen==Screen::Collections&&button==SDL_CONTROLLER_BUTTON_Y)actions.openFolders=true;
             if((currentScreen==Screen::Collections||currentScreen==Screen::CoverFlow||currentScreen==Screen::AlbumList)&&button==SDL_CONTROLLER_BUTTON_X)actions.rescan=true;
@@ -163,8 +242,8 @@ InputActions SdlInput::poll(Screen currentScreen, bool bluetoothEnabled, bool wa
             if(currentScreen==Screen::Folders&&button==SDL_CONTROLLER_BUTTON_Y)actions.rescan=true;
             if(currentScreen==Screen::Player&&button==SDL_CONTROLLER_BUTTON_Y)actions.addBookmark=true;
             if(currentScreen==Screen::Player&&button==SDL_CONTROLLER_BUTTON_X)actions.jumpBookmark=true;
-            if(currentScreen==Screen::Player){if(button==SDL_CONTROLLER_BUTTON_A)actions.togglePause=true;if(button==SDL_CONTROLLER_BUTTON_DPAD_LEFT)actions.seekSeconds=-10;if(button==SDL_CONTROLLER_BUTTON_DPAD_RIGHT)actions.seekSeconds=10;if(button==SDL_CONTROLLER_BUTTON_DPAD_UP)actions.changeTrack=-1;if(button==SDL_CONTROLLER_BUTTON_DPAD_DOWN)actions.changeTrack=1;if(button==SDL_CONTROLLER_BUTTON_LEFTSHOULDER)actions.seekSeconds=-30;if(button==SDL_CONTROLLER_BUTTON_RIGHTSHOULDER)actions.seekSeconds=30;}
-            else {if(button==SDL_CONTROLLER_BUTTON_A)actions.accept=true;if(button==SDL_CONTROLLER_BUTTON_DPAD_UP||button==SDL_CONTROLLER_BUTTON_DPAD_LEFT)actions.navigate=-1;if(button==SDL_CONTROLLER_BUTTON_DPAD_DOWN||button==SDL_CONTROLLER_BUTTON_DPAD_RIGHT)actions.navigate=1;if(button==SDL_CONTROLLER_BUTTON_LEFTSHOULDER)actions.navigate=-1;if(button==SDL_CONTROLLER_BUTTON_RIGHTSHOULDER)actions.navigate=1;}
+            if(currentScreen==Screen::Player){if(button==SDL_CONTROLLER_BUTTON_A)actions.togglePause=true;if(button==SDL_CONTROLLER_BUTTON_LEFTSHOULDER)actions.seekSeconds=-30;if(button==SDL_CONTROLLER_BUTTON_RIGHTSHOULDER)actions.seekSeconds=30;}
+            else {if(button==SDL_CONTROLLER_BUTTON_A)actions.accept=true;if(button==SDL_CONTROLLER_BUTTON_LEFTSHOULDER)actions.navigate=-1;if(button==SDL_CONTROLLER_BUTTON_RIGHTSHOULDER)actions.navigate=1;}
         }
         if (event.type == SDL_CONTROLLERBUTTONUP && event.cbutton.button == SDL_CONTROLLER_BUTTON_START) {
             // START has two deliberately separate gestures in the player:
@@ -194,10 +273,35 @@ InputActions SdlInput::poll(Screen currentScreen, bool bluetoothEnabled, bool wa
             }
         }
     }
+    const int x = std::abs(stickX_), y = std::abs(stickY_);
+    const int threshold = stickDirection_ == Direction::None ? 16000 : 10000;
+    if (x < threshold && y < threshold) stickDirection_ = Direction::None;
+    else {
+        // Dominant axis, with hysteresis around diagonals to prevent jitter.
+        const bool wasHorizontal = stickDirection_ == Direction::Left || stickDirection_ == Direction::Right;
+        bool horizontal = x >= y;
+        if (stickDirection_ != Direction::None && std::abs(x - y) < 4000)
+            horizontal = wasHorizontal;
+        stickDirection_ = horizontal ? (stickX_ < 0 ? Direction::Left : Direction::Right)
+            : (stickY_ < 0 ? Direction::Up : Direction::Down);
+    }
+    if (wakeOnly || helpVisible_) directionBlocked_ = direction() != Direction::None;
+    updateDirection(actions, currentScreen, now);
+    if (heldDirection_ != Direction::None && !directionBlocked_ && !helpVisible_ && !wakeOnly) {
+        hadActivity_ = true;
+        const Uint32 heldFor = now - directionHeldAt_;
+        const Uint32 interval = heldFor >= 1200U ? 65U : 110U;
+        // Repeat browsing only: holding Up/Down in the player must not skip many tracks.
+        // Emit at most one step per poll, never a burst after a slow frame.
+        if (currentScreen != Screen::Player && heldFor >= 330U && now - directionRepeatedAt_ >= interval) {
+            applyDirection(actions, currentScreen, heldDirection_);
+            directionRepeatedAt_ = now;
+        }
+    }
     // A solo two-second hold requests backgrounding (or a plain quit if
     // nothing is playing - Application decides which). Start+Select
     // together stays an unconditional immediate quit, handled above.
-    if (startHeld_ && !startLongPressTriggered_ && SDL_GetTicks() - startPressedAt_ >= 2000U) {
+    if (startHeld_ && !startLongPressTriggered_ && now - startPressedAt_ >= 2000U) {
         actions.background = true;
         startLongPressTriggered_ = true;
     }

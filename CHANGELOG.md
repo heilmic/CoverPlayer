@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Add accelerated hold-to-scroll for D-pad, keyboard arrows and the left analog
+  stick. Share direction mapping, suppress stick drift/diagonal jitter and stop
+  repeats on release, wake-only input, help, focus loss and screen changes.
+
 - Smooth rapid CoverFlow navigation with continuous position and velocity.
   Decode artwork off the render thread, retain 24 recent covers and cache text;
   defer periodic system-status reads while navigating. Resolve SDL geometry

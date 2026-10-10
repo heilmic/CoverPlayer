@@ -120,3 +120,14 @@ with `--device` using a real window and logged `batched geometry`. This verifies
 loading, eviction, missing artwork and shutdown; it is not an FPS benchmark.
 Rapid handheld navigation still needs user assessment. Both native galleries
 and music GIFs were regenerated. Documentation links and package checks passed.
+
+## Follow-up: held directions and left analog stick
+
+Installed and verified Test build
+`4f36c7af7af5528e3a5050ed0913b45ff5aee493f3f6c96acc3e5e643e6e3ffe`.
+Backup: `/userdata/system/coverplayer-backups/CoverPlayer-Test-20261010-131306-8319.tar.gz`.
+D-pad, keyboard arrows and left stick share direction mapping. Browsing repeats
+after 330 ms (110 ms steps, then 65 ms after 1.2 seconds); player actions stay
+single-step. Ten desktop tests and the ARM input regression test on .145 passed.
+Help screenshots and installation controls were updated. Physical stick feel
+and hold speed remain user acceptance checks.
