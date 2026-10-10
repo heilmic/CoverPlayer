@@ -24,9 +24,11 @@ package updates that installation; it does not create another player copy.
 
 ## Optional player icon: Art Book Next
 
-The ZIP includes an original, white SVG MP3-player symbol under
+The ZIP includes an original, white SVG MP3-player symbol with a CoverPlayer
+wordmark underneath, stored under
 `theme-customizations/art-book-next/logos/coverplayer.svg` (Apache-2.0).
-It is drawn with basic vector shapes and needs no emoji font.
+It uses basic vector shapes and outlined Roboto Mono Bold lettering, so it
+needs no installed fonts. The font's Apache-2.0 license is included with the app.
 
 ![Optional player symbol in Art Book Next](screenshots/knulli-category-icon.png)
 

@@ -69,6 +69,8 @@ system overlay, wrapper, optional SVG and illustrated guide. To package it
 without rebuilding the app, run `python scripts/build-knulli-category.py` with
 the existing `build/release/CoverPlayer-Knulli.zip`. Its root manifest is rebuilt
 and both archives are verified. Use `--base` and `--output` to select other paths.
+`scripts/Generate-CategoryLogo.ps1` regenerates the SVG player symbol and outlined
+wordmark from the bundled Roboto Mono Bold font using Windows System.Drawing.
 
 ## Demo media
 
