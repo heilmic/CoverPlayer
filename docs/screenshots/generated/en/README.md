@@ -1,10 +1,16 @@
 # English demo screenshots
 
 English interface at the native 640 x 480 resolution. The audiobook examples
-use English covers; German media retain their original titles. Chapter names
+use Sherlock Holmes BBC audio-drama covers; German media retain their original titles. Chapter names
 and playback data are fictional examples, not official chapter listings.
 
-Regenerate with `./scripts/Generate-DemoScreenshots.ps1 -Language en`.
+Regenerate with `./scripts/Generate-DemoScreenshots.ps1 -Language en -IncludeGif`.
+
+## CoverFlow in motion
+
+![Native CoverFlow animation](coverplayer-coverflow.gif)
+
+A 7.6-second music-cover loop captured from the actual SDL renderer.
 
 ## Audiobook CoverFlow
 

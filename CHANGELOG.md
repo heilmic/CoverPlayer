@@ -1,13 +1,54 @@
 # Releases
 
-## v0.1.0-rc.4 â€” simpler single-track playback
+## Unreleased
+
+- Smooth rapid CoverFlow navigation with continuous position and velocity.
+  Decode artwork off the render thread, retain 24 recent covers and cache text;
+  defer periodic system-status reads while navigating. Resolve SDL geometry
+  support at runtime so newer H700 firmware can batch cover drawing even when
+  the ARM binary was built with older SDL headers.
+- Refresh the README with a native music-cover GIF and shorter documentation.
+
+- Keep playback audible through firmware idle timeouts using temporary Knulli
+  inhibitors; dim the foreground backlight fully after 60 seconds without input.
+  Wake-only first input, paused/finished playback cleanup and crash restoration.
+- Add capability-gated muOS transient brightness and PID-inhibitor support.
+  Existing firmware settings are preserved; older muOS versions need validation.
+
+### CoverFlow readability on handhelds
+
+- Remove the oval backdrop, floor reflection and selection underline.
+- Set focused artwork to 256 pixels (264 for a single album), keeping it readable
+  with more room around the covers. Ease navigation more gently and match the
+  movement speed at the transition between the first and outer side slots.
+- Preserve the original side-cover rotation, spacing and depth for the familiar
+  page-turning feel; retain the album caption.
+- Area-filter decoded cover thumbnails and use linear texture filtering, with
+  a single filtered draw for the centered artwork on older SDL versions too.
+- Reset navigation animation when switching to a collection of a different size.
+
+
+- Default Knulli game-audio ducking to half the linear amplitude (about -6 dB).
+  Prevent compounded attenuation when games restart at a remembered volume,
+  and recover returning streams after background playback ends.
+
+- Refine CoverFlow with projected perspective and missing-cover placeholders.
+- Add an opt-out Knulli audio guardian for existing and newly created streams,
+  relative per-channel attenuation, exact unchanged-volume restoration, and
+  cleanup after helper termination. Preserve manual volume changes and mute.
+- Always take over an existing background session when opening a media file.
+- Add parser/volume tests and a fake-audio-server lifecycle regression test.
+- Hardware validation and persistent application volume recovery after a hard
+  restart remain pending (see TODO.md).
+
+## v0.1.0-rc.4 — simpler single-track playback
 
 - Opening a folder with one MP3 now starts or resumes it immediately; folders
   with multiple tracks still show the track list.
 - Added a muOS-compatible CoverPlayer app icon.
 - Rebuilt the Knulli and muOS packages from the same application source.
 
-## v0.1.0-rc.3 â€” muOS hardware support
+## v0.1.0-rc.3 — muOS hardware support
 
 - CoverPlayer now starts and plays audio on muOS Jacaranda using the device's
   SDL2 and ALSA/PipeWire libraries. Volume display and controls follow the
@@ -24,7 +65,7 @@
   on handhelds with `sha256sum -c`.
 - The muOS launcher uses the system's SD1/SD2-aware application and save paths.
 
-## v0.1.0-rc.2 â€” English interface
+## v0.1.0-rc.2 — English interface
 
 - Added an English interface. Open Help with Select and press Y to switch
   languages; the choice is saved for future launches.
@@ -34,7 +75,7 @@ The Knulli packages have been exercised on an RG34XXSP. The muOS package
 remains a hardware-untested candidate. Background game-audio balancing remains
 experimental; see [TODO.md](TODO.md).
 
-## v0.1.0-rc.1 â€” first public release candidate
+## v0.1.0-rc.1 — first public release candidate
 
 - Knulli package for controller-driven offline MP3 playback; an isolated
   Knulli test package is also available.

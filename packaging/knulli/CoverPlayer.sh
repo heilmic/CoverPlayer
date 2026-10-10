@@ -14,6 +14,10 @@ if [ -x /usr/bin/knulli-bluetooth ] && [ -x /usr/bin/bluetoothctl ]; then
     export COVERPLAYER_BLUETOOTH=1
 fi
 if command -v pactl >/dev/null 2>&1; then
+    if command -v timeout >/dev/null 2>&1; then
+        export COVERPLAYER_AUDIO_DUCKING="${COVERPLAYER_AUDIO_DUCKING:-1}"
+        export COVERPLAYER_DUCK_PERCENT="${COVERPLAYER_DUCK_PERCENT:-50}"
+    fi
     INITIAL_VOLUME="$(pactl get-sink-volume @DEFAULT_SINK@ 2>/dev/null | awk '{ for (i=1; i<=NF; i++) if ($i ~ /^[0-9]+%$/) { gsub(/%/, "", $i); print $i; exit } }')"
     case "$INITIAL_VOLUME" in
         ''|*[!0-9]*) ;;

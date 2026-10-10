@@ -3,6 +3,7 @@
 #include "coverplayer/platform/platform.hpp"
 #include "platform/sdl/linux_audio_system.hpp"
 #include "platform/sdl/sdl_input.hpp"
+#include "platform/sdl/playback_power.hpp"
 #include "platform/sdl/sdl_renderer.hpp"
 
 #include <SDL.h>
@@ -51,6 +52,7 @@ private:
     SdlRenderer renderer_;
     SdlInput input_;
     LinuxAudioSystem audio_;
+    PlaybackPower power_;
 
     // Battery charge changes slowly - reading the sysfs power-supply tree on
     // every frame (batteryPercent() is called from Application's ~8ms main

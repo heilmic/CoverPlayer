@@ -17,10 +17,12 @@ public:
     SdlInput(const SdlInput&) = delete;
     SdlInput& operator=(const SdlInput&) = delete;
 
-    [[nodiscard]] InputActions poll(Screen currentScreen, bool bluetoothEnabled);
+    [[nodiscard]] InputActions poll(Screen currentScreen, bool bluetoothEnabled, bool wakeOnly = false);
     [[nodiscard]] bool helpVisible() const noexcept { return helpVisible_; }
 
+    bool hadActivity() const { return hadActivity_; }
 private:
+    bool hadActivity_ = false;
     void openController(int deviceIndex);
     void closeController();
 

@@ -2,6 +2,7 @@
 
 #include <SDL.h>
 
+#include <algorithm>
 #include <filesystem>
 #include <iostream>
 #include <string>
@@ -29,7 +30,12 @@ bool saveBackBuffer(const std::string& path) {
 bool render(coverplayer::platform::SdlRenderer& renderer,
     coverplayer::platform::ViewModel view, const std::string& path) {
     renderer.setView(std::move(view));
-    renderer.present();
+    const Uint32 deadline = SDL_GetTicks() + 15000;
+    do {
+        renderer.present();
+        SDL_Delay(5);
+    } while ((renderer.coversLoading() || renderer.animating()) && SDL_GetTicks() < deadline);
+    if (renderer.coversLoading() || renderer.animating()) return false;
     return saveBackBuffer(path);
 }
 
@@ -40,8 +46,8 @@ int SDL_main(int argc, char** argv) {
 #else
 int main(int argc, char** argv) {
 #endif
-    if (argc != 3 && argc != 4) {
-        std::cerr << "usage: coverplayer_screenshot_tool <output-dir> <source-cover-dir> [de|en]\n";
+    if (argc < 3 || argc > 5) {
+        std::cerr << "usage: coverplayer_screenshot_tool <output-dir> <source-cover-dir> [de|en] [--animation]\n";
         return 2;
     }
     const std::filesystem::path output = std::filesystem::u8path(argv[1]);
@@ -51,9 +57,12 @@ int main(int argc, char** argv) {
     if (error) return 1;
 
     SDL_SetHint(SDL_HINT_RENDER_DRIVER, "software");
+    SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "linear");
+    SDL_setenv("COVERPLAYER_UI_WIDTH", "640", 1);
+    SDL_setenv("SDL_VIDEODRIVER", "dummy", 1);
     coverplayer::platform::SdlRenderer renderer;
-    const bool english = argc == 4 && std::string(argv[3]) == "en";
-    if (argc == 4) renderer.setLanguage(coverplayer::languageFromCode(argv[3]));
+    const bool english = argc >= 4 && std::string(argv[3]) == "en";
+    if (argc >= 4) renderer.setLanguage(coverplayer::languageFromCode(argv[3]));
     const auto demo = [english](const char* de, const char* en) {
         return std::string(english ? en : de);
     };
@@ -61,31 +70,43 @@ int main(int argc, char** argv) {
     renderer.setPlayerDetails(64, 2, {}, 78);
 
     const std::vector<std::string> covers{
-        (source / (english ? "hp-1.jpg" : "236.png")).u8string(), (source / (english ? "hp-2.jpg" : "237.png")).u8string(),
-        (source / (english ? "hp-3.jpg" : "238.png")).u8string(), (source / (english ? "hp-4.jpg" : "239.png")).u8string(),
-        (source / (english ? "hp-5.jpg" : "240.png")).u8string()
+        (source / (english ? "sherlock-1.jpg" : "236.png")).u8string(), (source / (english ? "sherlock-2.jpg" : "237.png")).u8string(),
+        (source / (english ? "sherlock-3.jpg" : "238.png")).u8string(), (source / (english ? "sherlock-4.jpg" : "239.png")).u8string(),
+        (source / (english ? "sherlock-5.jpg" : "240.png")).u8string()
     };
     const std::vector<std::string> episodes{
-        demo("236  Im Bann des Barrakudas|6 TITEL  7% GEHOERT", "Philosopher's Stone|17 CHAPTERS  7% LISTENED"),
-        demo("237  Der rote Bueffel|1 TITEL  100% GEHOERT", "Chamber of Secrets|18 CHAPTERS  100% LISTENED"),
-        demo("238  Falsche Schuld|7 TITEL  42% GEHOERT", "Prisoner of Azkaban|22 CHAPTERS  42% LISTENED"),
-        demo("239  Sieben Palmen|6 TITEL  18% GEHOERT", "Goblet of Fire|37 CHAPTERS  18% LISTENED"),
-        demo("240  Die schwarze Rose|1 TITEL  88% GEHOERT", "Order of the Phoenix|38 CHAPTERS  88% LISTENED")
+        demo("236  Im Bann des Barrakudas|6 TITEL  7% GEHOERT", "The Adventures of Sherlock Holmes|12 TRACKS  7% LISTENED"),
+        demo("237  Der rote Bueffel|1 TITEL  100% GEHOERT", "The Memoirs of Sherlock Holmes|12 TRACKS  100% LISTENED"),
+        demo("238  Falsche Schuld|7 TITEL  42% GEHOERT", "The Return of Sherlock Holmes|13 TRACKS  42% LISTENED"),
+        demo("239  Sieben Palmen|6 TITEL  18% GEHOERT", "His Last Bow|8 TRACKS  18% LISTENED"),
+        demo("240  Die schwarze Rose|1 TITEL  88% GEHOERT", "The Casebook of Sherlock Holmes|12 TRACKS  88% LISTENED")
     };
 
     coverplayer::platform::ViewModel flow;
     flow.screen = coverplayer::platform::Screen::CoverFlow;
-    flow.title = demo("DIE DREI ???", "HARRY POTTER AUDIOBOOKS");
+    flow.title = demo("DIE DREI ???", "SHERLOCK HOLMES");
     flow.items = episodes;
     flow.itemImages = covers;
     flow.selected = 2;
     if (!render(renderer, flow, (output / "01-coverflow.bmp").u8string())) return 1;
 
+    // Keep boundary cases available for visual review without adding gallery entries.
+    std::filesystem::create_directories(output / "layout-review", error);
+    auto edge = flow;
+    edge.selected = 0;
+    renderer.setView(edge);
+    SDL_Delay(450);
+    if (!render(renderer, edge, (output / "layout-review/edge.bmp").u8string())) return 1;
+    auto single = edge;
+    single.items = {episodes.front()};
+    single.itemImages = {covers.front()};
+    if (!render(renderer, single, (output / "layout-review/single.bmp").u8string())) return 1;
+
     coverplayer::platform::ViewModel collections;
     collections.screen = coverplayer::platform::Screen::Collections;
     collections.title = demo("SAMMLUNGEN", "COLLECTIONS");
     collections.items = {
-        demo("Die drei ???|HOERSPIEL  5 MEDIEN  62% GEHOERT", "Harry Potter|AUDIOBOOK  5 ALBUMS  62% LISTENED"),
+        demo("Die drei ???|HOERSPIEL  5 MEDIEN  62% GEHOERT", "Sherlock Holmes|AUDIO DRAMA  5 ALBUMS  62% LISTENED"),
         demo("Hoerbuecher|HOERBUCH  18 MEDIEN  31% GEHOERT", "Audiobooks|AUDIOBOOK  18 ALBUMS  31% LISTENED"),
         demo("Podcasts|PODCAST  12 MEDIEN", "Podcasts|PODCAST  12 ALBUMS"),
         demo("Musik|MUSIK  24 MEDIEN", "Music|MUSIC  24 ALBUMS")
@@ -96,7 +117,7 @@ int main(int argc, char** argv) {
 
     coverplayer::platform::ViewModel list;
     list.screen = coverplayer::platform::Screen::AlbumList;
-    list.title = demo("DIE DREI ???", "HARRY POTTER AUDIOBOOKS");
+    list.title = demo("DIE DREI ???", "SHERLOCK HOLMES");
     list.items = {episodes[1], episodes[2], episodes[3], episodes[4]};
     list.itemImages = {covers[1], covers[2], covers[3], covers[4]};
     list.coverPath = covers.back();
@@ -105,7 +126,7 @@ int main(int argc, char** argv) {
 
     coverplayer::platform::ViewModel tracks;
     tracks.screen = coverplayer::platform::Screen::Tracks;
-    tracks.title = demo("239  SIEBEN PALMEN", "GOBLET OF FIRE");
+    tracks.title = demo("239  SIEBEN PALMEN", "HIS LAST BOW");
     tracks.coverPath = covers[3];
     tracks.selected = 4;
     tracks.items = {
@@ -120,7 +141,7 @@ int main(int argc, char** argv) {
     coverplayer::platform::ViewModel player;
     player.screen = coverplayer::platform::Screen::Player;
     player.title = demo("Die schwarze Rose", "A message at dawn");
-    player.subtitle = demo("240  DIE SCHWARZE ROSE  |  TITEL 1/1", "ORDER OF THE PHOENIX  |  CHAPTER 1/38");
+    player.subtitle = demo("240  DIE SCHWARZE ROSE  |  TITEL 1/1", "THE CASEBOOK OF SHERLOCK HOLMES  |  TRACK 1/12");
     player.coverPath = covers.back();
     if (!render(renderer, player, (output / "05-jetzt-laeuft.bmp").u8string())) return 1;
 
@@ -159,17 +180,17 @@ int main(int argc, char** argv) {
     if (!render(renderer, checkPod, (output / "08-checkpod.bmp").u8string())) return 1;
 
     const std::vector<std::string> internationalCovers{
-        (source / "hp-1.jpg").u8string(), (source / "hp-2.jpg").u8string(),
-        (source / "hp-3.jpg").u8string(), (source / "hp-4.jpg").u8string(),
-        (source / "hp-5.jpg").u8string()
+        (source / "sherlock-1.jpg").u8string(), (source / "sherlock-2.jpg").u8string(),
+        (source / "sherlock-3.jpg").u8string(), (source / "sherlock-4.jpg").u8string(),
+        (source / "sherlock-5.jpg").u8string()
     };
     coverplayer::platform::ViewModel international;
     international.screen = coverplayer::platform::Screen::CoverFlow;
-    international.title = "HARRY POTTER AUDIOBOOKS";
+    international.title = "SHERLOCK HOLMES";
     international.items = {
-        "Philosopher's Stone|17 CHAPTERS", "Chamber of Secrets|18 CHAPTERS",
-        "Prisoner of Azkaban|22 CHAPTERS  64% LISTENED", "Goblet of Fire|37 CHAPTERS",
-        "Order of the Phoenix|38 CHAPTERS"
+        "The Adventures of Sherlock Holmes|12 TRACKS", "The Memoirs of Sherlock Holmes|12 TRACKS",
+        "The Return of Sherlock Holmes|13 TRACKS  64% LISTENED", "His Last Bow|8 TRACKS",
+        "The Casebook of Sherlock Holmes|12 TRACKS"
     };
     international.itemImages = internationalCovers;
     international.selected = 2;
@@ -199,23 +220,49 @@ int main(int argc, char** argv) {
     renderer.setHelpVisible(false);
     coverplayer::platform::ViewModel longTracks;
     longTracks.screen = coverplayer::platform::Screen::Tracks;
-    longTracks.title = demo("239 - Sieben Palmen", "Goblet of Fire");
+    longTracks.title = demo("239 - Sieben Palmen", "His Last Bow");
     longTracks.coverPath = covers[3];
     longTracks.selected = 2;
     longTracks.items = {
-        demo("239 - Sieben Palmen (Teil 01) - Eine geheimnisvolle Entdeckung", "Goblet of Fire (Chapter 01) - A mysterious discovery"),
-        demo("239 - Sieben Palmen (Teil 02) - Die Spur fuehrt zur Villa", "Goblet of Fire (Chapter 02) - The path to the old house"),
-        demo("239 - Sieben Palmen (Teil 03) - Das Versteck unter den Palmen", "Goblet of Fire (Chapter 03) - A secret beneath the trees"),
-        demo("239 - Sieben Palmen (Teil 04) - Das Raetsel wird geloest", "Goblet of Fire (Chapter 04) - The mystery is finally solved")
+        demo("239 - Sieben Palmen (Teil 01) - Eine geheimnisvolle Entdeckung", "His Last Bow (Chapter 01) - A mysterious discovery"),
+        demo("239 - Sieben Palmen (Teil 02) - Die Spur fuehrt zur Villa", "His Last Bow (Chapter 02) - The path to the old house"),
+        demo("239 - Sieben Palmen (Teil 03) - Das Versteck unter den Palmen", "His Last Bow (Chapter 03) - A secret beneath the trees"),
+        demo("239 - Sieben Palmen (Teil 04) - Das Raetsel wird geloest", "His Last Bow (Chapter 04) - The mystery is finally solved")
     };
     if (!render(renderer, longTracks, (output / "13-long-tracks.bmp").u8string())) return 1;
     coverplayer::platform::ViewModel longPlayer;
     longPlayer.screen = coverplayer::platform::Screen::Player;
     longPlayer.title = longTracks.items[longTracks.selected];
-    longPlayer.subtitle = demo("239 - Sieben Palmen  |  TITEL 3/4", "GOBLET OF FIRE  |  CHAPTER 3/37");
+    longPlayer.subtitle = demo("239 - Sieben Palmen  |  TITEL 3/4", "HIS LAST BOW  |  TRACK 3/8");
     longPlayer.coverPath = longTracks.coverPath;
     renderer.setPlaybackStatus(true, false, 843.0, 1860.0);
     renderer.setPlayerDetails(45, 3, {}, 76);
     if (!render(renderer, longPlayer, (output / "14-long-player.bmp").u8string())) return 1;
+    if (argc == 5) {
+        if (std::string(argv[4]) != "--animation") return 2;
+        const auto frames = output / "animation";
+        std::filesystem::create_directories(frames, error);
+        if (error) return 1;
+        renderer.setPlaybackStatus(false, false, 0, 0);
+        renderer.setSleepTimer(0);
+        renderer.setView(music);
+        const Uint32 started = SDL_GetTicks();
+        const std::size_t selection[] = {2, 3, 4, 3, 2, 1, 0, 1, 2};
+        // Record the real renderer at 25 fps, including its native easing.
+        for (int frame = 0; frame < 190; ++frame) {
+            const Uint32 due = started + static_cast<Uint32>(frame * 40);
+            const Uint32 now = SDL_GetTicks();
+            if (now < due) SDL_Delay(due - now);
+            const std::size_t step = std::min<std::size_t>(frame / 20, 8);
+            if (music.selected != selection[step]) {
+                music.selected = selection[step];
+                renderer.setView(music);
+            }
+            SDL_PumpEvents();
+            renderer.present();
+            const auto name = "frame-" + std::to_string(1000 + frame) + ".bmp";
+            if (!saveBackBuffer((frames / name).u8string())) return 1;
+        }
+    }
     return 0;
 }

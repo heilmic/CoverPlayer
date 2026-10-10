@@ -1,4 +1,5 @@
 #include "platform/sdl/linux_background_session.hpp"
+#include "platform/sdl/audio_ducker.hpp"
 
 #include <SDL.h>
 
@@ -79,85 +80,6 @@ bool isRunningHelper(long pid) {
     return processAlive(pid) && LinuxBackgroundSession::isBackgroundHelperCommandLine(readCommandLine(pid));
 }
 
-std::string runCommand(const std::string& command) {
-    FILE* pipe = popen((command + " 2>/dev/null").c_str(), "r");
-    if (pipe == nullptr) return {};
-    std::string output;
-    char buffer[1024]{};
-    while (std::fgets(buffer, static_cast<int>(sizeof(buffer)), pipe) != nullptr) output += buffer;
-    pclose(pipe);
-    return output;
-}
-
-int duckTargetPercent() {
-    if (const char* value = std::getenv("COVERPLAYER_DUCK_PERCENT")) {
-        char* end = nullptr;
-        const long parsed = std::strtol(value, &end, 10);
-        if (end != value) return static_cast<int>(std::clamp(parsed, 0L, 100L));
-    }
-    return 50;
-}
-
-// Every PulseAudio sink input except this binary's own - a game, sound
-// effects, EmulationStation itself. Knulli actually runs PipeWire with its
-// `pipewire-pulse` PulseAudio-compatibility shim, not real PulseAudio, and
-// the two disagree on which property carries the owning process's name:
-// real PulseAudio's client library fills in `application.process.binary`,
-// but PipeWire's ALSA-compat layer never sets that property at all -
-// instead it exposes `application.name = "PipeWire ALSA [coverplayer]"`
-// and `node.name = "alsa_playback.coverplayer"`. Checking only the former
-// (as an earlier version of this function did) matches nothing at all on
-// Knulli's real audio stack, silently misidentifying this process's own
-// stream as "other" and ducking/never-restoring it right along with
-// everything else - confirmed via a real `pactl list sink-inputs` capture
-// on-device. Checking all three covers both stacks.
-std::vector<int> otherSinkInputIndices() {
-    const auto listing = runCommand("/usr/bin/pactl list sink-inputs");
-    std::vector<int> indices;
-    std::istringstream lines(listing);
-    std::string line;
-    int currentIndex = -1;
-    bool currentIsOwn = false;
-    const auto flush = [&]() {
-        if (currentIndex >= 0 && !currentIsOwn) indices.push_back(currentIndex);
-    };
-    while (std::getline(lines, line)) {
-        const auto marker = line.find("Sink Input #");
-        if (marker != std::string::npos) {
-            flush();
-            currentIndex = std::atoi(line.c_str() + marker + 12);
-            currentIsOwn = false;
-            continue;
-        }
-        if ((line.find("application.process.binary") != std::string::npos ||
-             line.find("application.name") != std::string::npos ||
-             line.find("node.name") != std::string::npos) &&
-            line.find("coverplayer") != std::string::npos) {
-            currentIsOwn = true;
-        }
-    }
-    flush();
-    return indices;
-}
-
-void rampOtherAudio(int fromPercent, int toPercent, const std::function<void()>& onTick) {
-    const auto indices = otherSinkInputIndices();
-    if (indices.empty()) return;
-    constexpr int steps = 6;
-    constexpr auto stepDelay = std::chrono::milliseconds(120);
-    for (int step = 1; step <= steps; ++step) {
-        const int percent = fromPercent + (toPercent - fromPercent) * step / steps;
-        for (const int index : indices) {
-            runCommand("/usr/bin/pactl set-sink-input-volume " + std::to_string(index) + " " +
-                std::to_string(percent) + "%");
-        }
-        if (step < steps) {
-            std::this_thread::sleep_for(stepDelay);
-            if (onTick) onTick();
-        }
-    }
-}
-
 // If a background helper is currently running, kills it and removes the
 // lock file, waiting briefly to confirm it is actually gone before
 // returning - so a caller that reopens the same file right after this can
@@ -168,7 +90,10 @@ std::optional<std::string> stopIfRunning(const std::string& lockFilePath) {
     const auto existing = readLockState(lockFilePath);
     std::error_code removeError;
     std::filesystem::remove(std::filesystem::u8path(lockFilePath), removeError);
-    if (!existing || !isRunningHelper(existing->pid)) return std::nullopt;
+    if (!existing || !isRunningHelper(existing->pid)) {
+        recoverAudioDucking();
+        return std::nullopt;
+    }
     // SIGKILL, not SIGTERM: it cannot be caught, blocked, or ignored by the
     // target for any reason, so this is guaranteed to actually end the
     // helper rather than merely asking it to - the helper has nothing to
@@ -177,10 +102,7 @@ std::optional<std::string> stopIfRunning(const std::string& lockFilePath) {
     for (int attempt = 0; attempt < 40 && processAlive(existing->pid); ++attempt) {
         std::this_thread::sleep_for(std::chrono::milliseconds(25));
     }
-    // The killed helper never got a chance to restore ducked volumes
-    // itself; do it here so a SIGKILL can never leave other audio stuck
-    // quiet. Harmless if a replacement helper re-ducks moments later.
-    rampOtherAudio(duckTargetPercent(), 100, {});
+    recoverAudioDucking();
     return existing->mediaPath;
 }
 #endif
@@ -272,22 +194,6 @@ bool LinuxBackgroundSession::isBackgroundHelperCommandLine(const std::string& co
     if (secondEnd == std::string::npos) return false;
     return commandLine.compare(0, firstEnd, "coverplayer") == 0 &&
         commandLine.compare(firstEnd + 1, secondEnd - firstEnd - 1, "--background-audio") == 0;
-}
-
-void LinuxBackgroundSession::duckOtherAudio(const std::function<void()>& onTick) {
-#ifndef _WIN32
-    rampOtherAudio(100, duckTargetPercent(), onTick);
-#else
-    static_cast<void>(onTick);
-#endif
-}
-
-void LinuxBackgroundSession::restoreOtherAudio(const std::function<void()>& onTick) {
-#ifndef _WIN32
-    rampOtherAudio(duckTargetPercent(), 100, onTick);
-#else
-    static_cast<void>(onTick);
-#endif
 }
 
 } // namespace coverplayer::platform

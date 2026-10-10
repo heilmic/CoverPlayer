@@ -1,30 +1,34 @@
 # Future work
 
-## Safe background-audio ducking on Knulli
+Knulli reliability and cover-first offline playback take priority. This is a
+backlog, not a commitment to implement every feature.
 
-The current background helper lowers only audio streams that already exist
-when background playback starts. A game launched afterward can remain at full
-volume. It also restores other streams to a fixed 100% instead of their
-original levels. Do not describe this as reliable automatic volume balancing.
+## Before the next release
 
-For a later version, implement Knulli-specific, per-stream ducking with these
-invariants:
+- Investigate intermittent Bluetooth audio stutter reported during dimmed playback.
+  The inspected session was not muted and showed no audio-server underruns;
+  the cause remains unconfirmed.
+- Measure the updated CoverFlow on H700 hardware during rapid navigation and
+  direction changes. Test large artwork and long collections.
+- Expand audio lifecycle checks: Bluetooth reconnect, manual stream volume,
+  mono/stereo, muted streams, helper/guardian failure and audio-server restart.
+  [Recovery limits](docs/coverflow-audio-update.md#restoration-and-limitations).
+- Validate the capability-gated muOS power adapter on real muOS hardware;
+  its isolated fixture tests do not establish firmware compatibility.
+- Choose a version and exercise the real release publication workflow.
+  Test deployment, backup and verification already work; a push is not a release.
 
-- Duck only while CoverPlayer's background playback helper is actually active.
-  A normal CoverPlayer exit without background playback must not duck audio.
-- Observe newly created game/EmulationStation streams as well as streams that
-  were already playing when background playback began.
-- Save each affected stream's original volume and mute state and restore those
-  exact values when background playback stops or CoverPlayer takes over again.
-  Do not change the master device/sink volume or set other streams to a fixed
-  100% during cleanup.
-- Handle normal exit, helper failure, interrupted handover, and device restart
-  safely. Do not assume a reboot clears ducked levels: the audio session
-  manager may persist per-application stream volumes.
-- Verify behavior on the actual Knulli audio stack, including a game launched
-  after backgrounding, reopening CoverPlayer, exiting without backgrounding,
-  and a killed helper. Keep this optional platform capability disabled where
-  the required audio controls are unavailable.
+## Optional improvements
 
-Until this is implemented and device-tested, lower RetroArch's game audio
-manually when needed.
+- Continue-listening row using existing progress, with last-played ordering and
+  clear handling of completed or unavailable media.
+- Browse while listening, keeping the playing album independent of selection
+  and preserving auto-next. Review button conflicts and return-to-player behavior.
+- Page jumps and accelerated seeking if device testing demonstrates a need.
+- Offline podcast downloads: RSS browsing and manual episode downloads first.
+  Define MP3 format compatibility, use temporary downloads, expose only complete
+  files and preserve progress. Scheduling and automatic deletion are later work.
+
+Web radio and Jellyfin are out of scope. Switch/PortMaster ports and further
+muOS-specific features must not delay Knulli reliability. Native demo galleries
+are available; larger marketing images are not a current priority.

@@ -88,6 +88,22 @@ int main() {
         }
     }
 
+    {
+        coverplayer::platform::SdlInput input;
+        if (!pushButton(SDL_CONTROLLER_BUTTON_A)) return 1;
+        const auto wake = input.poll(coverplayer::platform::Screen::Player, false, true);
+        if (!input.hadActivity() || wake.accept || wake.togglePause) return 1;
+        if (!pushStartEvent(SDL_CONTROLLERBUTTONDOWN)) return 1;
+        const auto startWake = input.poll(coverplayer::platform::Screen::Player, false, true);
+        if (startWake.cycleSleepTimer || startWake.background) return 1;
+        if (!pushStartEvent(SDL_CONTROLLERBUTTONUP)) return 1;
+        const auto release = input.poll(coverplayer::platform::Screen::Player, false);
+        if (release.cycleSleepTimer || release.background) return 1;
+        if (!pushButton(SDL_CONTROLLER_BUTTON_A)) return 1;
+        const auto next = input.poll(coverplayer::platform::Screen::Player, false);
+        if (!next.togglePause) return 1;
+    }
+
     SDL_Quit();
     return 0;
 }

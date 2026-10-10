@@ -42,10 +42,22 @@ void SdlInput::closeController() {
     startLongPressTriggered_ = false;
 }
 
-InputActions SdlInput::poll(Screen currentScreen, bool bluetoothEnabled) {
+InputActions SdlInput::poll(Screen currentScreen, bool bluetoothEnabled, bool wakeOnly) {
     InputActions actions{};
+    hadActivity_ = false;
     SDL_Event event{};
     while (SDL_PollEvent(&event) != 0) {
+        const bool activity = event.type == SDL_KEYDOWN || event.type == SDL_CONTROLLERBUTTONDOWN ||
+            event.type == SDL_JOYBUTTONDOWN || event.type == SDL_MOUSEBUTTONDOWN ||
+            (event.type == SDL_CONTROLLERAXISMOTION && std::abs(int(event.caxis.value)) > 16000) ||
+            (event.type == SDL_JOYHATMOTION && event.jhat.value != SDL_HAT_CENTERED);
+        hadActivity_ = hadActivity_ || activity;
+        if (wakeOnly && (activity || event.type == SDL_KEYUP || event.type == SDL_CONTROLLERBUTTONUP ||
+            event.type == SDL_JOYBUTTONUP || event.type == SDL_TEXTINPUT)) {
+            startHeld_ = false;
+            startLongPressTriggered_ = false;
+            continue;
+        }
         if (event.type == SDL_QUIT) actions.quit = true;
         if (event.type == SDL_APP_WILLENTERBACKGROUND) actions.suspend = true;
         if (event.type == SDL_APP_DIDENTERFOREGROUND) actions.resume = true;
@@ -192,8 +204,8 @@ InputActions SdlInput::poll(Screen currentScreen, bool bluetoothEnabled) {
     if (controller_ != nullptr && !helpVisible_) {
         const bool leftPressed = SDL_GameControllerGetAxis(controller_, SDL_CONTROLLER_AXIS_TRIGGERLEFT) > 16000;
         const bool rightPressed = SDL_GameControllerGetAxis(controller_, SDL_CONTROLLER_AXIS_TRIGGERRIGHT) > 16000;
-        if (leftPressed && !leftTriggerPressed_) actions.seekSeconds = -30.0;
-        if (rightPressed && !rightTriggerPressed_) actions.seekSeconds = 30.0;
+        if (!wakeOnly && leftPressed && !leftTriggerPressed_) actions.seekSeconds = -30.0;
+        if (!wakeOnly && rightPressed && !rightTriggerPressed_) actions.seekSeconds = 30.0;
         leftTriggerPressed_ = leftPressed;
         rightTriggerPressed_ = rightPressed;
     }

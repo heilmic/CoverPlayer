@@ -31,8 +31,14 @@ Capabilities SdlPlatform::capabilities() const noexcept {
 }
 
 InputActions SdlPlatform::pollEvents() {
-    auto actions = input_.poll(renderer_.currentScreen(), audio_.bluetoothEnabled());
-    audio_.tick();
+    auto actions = input_.poll(renderer_.currentScreen(), audio_.bluetoothEnabled(), power_.dark());
+    if (input_.hadActivity()) power_.activity();
+    power_.tick(SDL_GetTicks());
+    renderer_.setDrawingEnabled(!power_.dark());
+    if (power_.dark()) SDL_Delay(40);
+    // These status reads invoke firmware tools synchronously. Keep them out
+    // of rapid navigation; explicit volume/Bluetooth actions still run normally.
+    if (!input_.hadActivity() && !renderer_.animating()) audio_.tick();
     renderer_.setHelpVisible(input_.helpVisible());
     renderer_.setBluetoothStatus(audio_.bluetoothEnabled(), audio_.bluetoothAudioActive());
     renderer_.present();
@@ -40,6 +46,8 @@ InputActions SdlPlatform::pollEvents() {
 }
 
 void SdlPlatform::setPlaybackStatus(bool active, bool paused, double positionSeconds, double durationSeconds) {
+    power_.playback(active && !paused);
+    renderer_.setDrawingEnabled(!power_.dark());
     renderer_.setPlaybackStatus(active, paused, positionSeconds, durationSeconds);
 }
 

@@ -124,15 +124,27 @@ SdlRenderer::SdlRenderer() {
         TTF_Quit();
         throw std::runtime_error("Title font loading failed: " + message);
     }
+    // The device can have a newer SDL than our build headers. Resolve its
+    // batching API at runtime instead of permanently selecting the strip path.
+#ifdef _WIN32
+    geometryLibrary_ = SDL_LoadObject("SDL2.dll");
+#else
+    geometryLibrary_ = SDL_LoadObject("libSDL2-2.0.so.0");
+#endif
+    if (geometryLibrary_) renderGeometry_ = reinterpret_cast<RenderGeometry>(
+        SDL_LoadFunction(geometryLibrary_, "SDL_RenderGeometry"));
+    SDL_Log("CoverPlayer covers: %s", renderGeometry_ ? "batched geometry" : "strip fallback");
 }
 
 SdlRenderer::~SdlRenderer() {
-    SDL_DestroyTexture(coverTexture_);
-    for (auto* texture : flowTextures_) SDL_DestroyTexture(texture);
+    if (pendingCover_.valid()) SDL_FreeSurface(pendingCover_.get());
+    for (const auto& entry : coverCache_) SDL_DestroyTexture(entry.second.texture);
+    for (const auto& entry : textCache_) SDL_DestroyTexture(entry.second.texture);
     TTF_CloseFont(titleFont_);
     TTF_CloseFont(font_);
     SDL_DestroyRenderer(renderer_);
     SDL_DestroyWindow(window_);
+    if (geometryLibrary_) SDL_UnloadObject(geometryLibrary_);
     TTF_Quit();
     IMG_Quit();
 }
@@ -145,23 +157,16 @@ void SdlRenderer::setPlaybackStatus(bool active, bool paused, double positionSec
 }
 
 void SdlRenderer::setView(ViewModel view) {
-    if (view.screen == Screen::CoverFlow && view_.screen == Screen::CoverFlow &&
-        view.selected != view_.selected && !view.items.empty() && view.items.size() == view_.items.size()) {
-        const Uint32 now = SDL_GetTicks();
-        // Keep the currently visible position when another direction press
-        // arrives mid-transition. Restarting from a whole slot made covers jump.
-        const float shift = static_cast<float>(view.selected) - static_cast<float>(view_.selected);
-        flowAnimationStartOffset_ = std::clamp(coverFlowOffset(now) + shift, -2.5F, 2.5F);
-        flowAnimationDurationMs_ = static_cast<Uint32>(std::clamp(
-            250.0F * std::abs(flowAnimationStartOffset_), 170.0F, 420.0F));
-        flowAnimationActive_ = std::abs(flowAnimationStartOffset_) > 0.01F;
-        flowAnimationStartedAt_ = now;
-    } else if (view.screen != Screen::CoverFlow || view_.screen != Screen::CoverFlow) {
-        flowAnimationActive_ = false;
+    const Uint32 now = SDL_GetTicks();
+    coverFlowOffset(now);
+    const bool sameCollection = view.screen == Screen::CoverFlow && view_.screen == Screen::CoverFlow &&
+        view.title == view_.title && view.itemImages == view_.itemImages && view.items.size() == view_.items.size();
+    if (sameCollection) {
+        flowMotion_.shift(static_cast<double>(view.selected) - static_cast<double>(view_.selected));
+    } else {
+        flowMotion_.reset();
     }
     view_ = std::move(view);
-    updateCover();
-    updateCoverFlowTextures();
     if (view_.immediate) present();
 }
 
@@ -183,16 +188,59 @@ void SdlRenderer::setBluetoothStatus(bool capable, bool audioActive) {
 }
 
 void SdlRenderer::present() {
+    if (!drawingEnabled_) return;
+    collectCover();
+    updateCover();
+    updateCoverFlowTextures();
+    trimCoverCache();
     renderHandheldUi();
 }
 
 void SdlRenderer::updateCover() {
-    if (loadedCoverPath_ == view_.coverPath) return;
-    SDL_DestroyTexture(coverTexture_); coverTexture_=nullptr; loadedCoverPath_=view_.coverPath;
-    if (!loadedCoverPath_.empty()) coverTexture_=loadCoverTexture(loadedCoverPath_);
+    loadedCoverPath_ = view_.screen == Screen::CoverFlow ? std::string{} : view_.coverPath;
+    coverTexture_ = loadCoverTexture(loadedCoverPath_);
 }
 
 SDL_Texture* SdlRenderer::loadCoverTexture(const std::string& path) {
+    if (path.empty()) return nullptr;
+    const auto found = coverCache_.find(path);
+    if (found != coverCache_.end()) {
+        found->second.used = ++coverUse_;
+        return found->second.texture;
+    }
+    if (!pendingCover_.valid()) {
+        pendingCoverPath_ = path;
+        pendingCover_ = std::async(std::launch::async, [path] { return decodeCover(path); });
+    }
+    return nullptr;
+}
+
+void SdlRenderer::collectCover() {
+    if (!pendingCover_.valid() || pendingCover_.wait_for(std::chrono::seconds(0)) != std::future_status::ready) return;
+    SDL_Surface* surface = pendingCover_.get();
+    SDL_Texture* texture = surface ? SDL_CreateTextureFromSurface(renderer_, surface) : nullptr;
+    if (texture) SDL_SetTextureScaleMode(texture, SDL_ScaleModeLinear);
+    SDL_FreeSurface(surface);
+    // Cache failures too, so a missing cover never starts an endless decode loop.
+    coverCache_[pendingCoverPath_] = {texture, ++coverUse_};
+}
+
+void SdlRenderer::trimCoverCache() {
+    // At most ~14 MiB of RGBA artwork; retain recent covers for quick reversals.
+    while (coverCache_.size() > 24) {
+        auto oldest = coverCache_.end();
+        for (auto it = coverCache_.begin(); it != coverCache_.end(); ++it) {
+            if (it->first == loadedCoverPath_ ||
+                std::find(loadedFlowPaths_.begin(), loadedFlowPaths_.end(), it->first) != loadedFlowPaths_.end()) continue;
+            if (oldest == coverCache_.end() || it->second.used < oldest->second.used) oldest = it;
+        }
+        if (oldest == coverCache_.end()) break;
+        SDL_DestroyTexture(oldest->second.texture);
+        coverCache_.erase(oldest);
+    }
+}
+
+SDL_Surface* SdlRenderer::decodeCover(const std::string& path) {
     SDL_Surface* source = IMG_Load(path.c_str());
     if (source == nullptr) return nullptr;
     constexpr int maximumSide = 384;
@@ -203,12 +251,36 @@ SDL_Texture* SdlRenderer::loadCoverTexture(const std::string& path) {
     const int height = std::max(1, static_cast<int>(source->h * scale));
     SDL_Surface* resized = SDL_CreateRGBSurfaceWithFormat(0, width, height, 32, SDL_PIXELFORMAT_RGBA32);
     if (resized == nullptr) { SDL_FreeSurface(source); return nullptr; }
-    SDL_Rect destination{0, 0, width, height};
-    SDL_BlitScaled(source, nullptr, resized, &destination);
-    SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer_, resized);
-    SDL_FreeSurface(resized);
+    // Area filtering preserves small lettering when reducing large artwork.
+    SDL_Surface* rgba = SDL_ConvertSurfaceFormat(source, SDL_PIXELFORMAT_RGBA32, 0);
+    if (rgba == nullptr) { SDL_FreeSurface(resized); SDL_FreeSurface(source); return nullptr; }
+    SDL_LockSurface(rgba);
+    SDL_LockSurface(resized);
+    for (int y = 0; y < height; ++y) {
+        const double top = double(y) * rgba->h / height;
+        const double bottom = double(y + 1) * rgba->h / height;
+        auto* output = static_cast<Uint8*>(resized->pixels) + y * resized->pitch;
+        for (int x = 0; x < width; ++x) {
+            const double left = double(x) * rgba->w / width;
+            const double right = double(x + 1) * rgba->w / width;
+            double channels[4]{};
+            for (int sy = int(top); sy < int(std::ceil(bottom)); ++sy) {
+                const double wy = std::min(bottom, double(sy + 1)) - std::max(top, double(sy));
+                const auto* row = static_cast<const Uint8*>(rgba->pixels) + sy * rgba->pitch;
+                for (int sx = int(left); sx < int(std::ceil(right)); ++sx) {
+                    const double weight = wy * (std::min(right, double(sx + 1)) - std::max(left, double(sx)));
+                    for (int c = 0; c < 4; ++c) channels[c] += row[sx * 4 + c] * weight;
+                }
+            }
+            const double area = (right - left) * (bottom - top);
+            for (int c = 0; c < 4; ++c) output[x * 4 + c] = static_cast<Uint8>(std::clamp(std::lround(channels[c] / area), 0L, 255L));
+        }
+    }
+    SDL_UnlockSurface(resized);
+    SDL_UnlockSurface(rgba);
+    SDL_FreeSurface(rgba);
     SDL_FreeSurface(source);
-    return texture;
+    return resized;
 }
 
 void SdlRenderer::updateCoverFlowTextures() {
@@ -222,49 +294,44 @@ void SdlRenderer::updateCoverFlowTextures() {
             if (index >= 0 && index < count) desiredPaths[slot] = view_.itemImages[static_cast<std::size_t>(index)];
         }
     }
-    std::array<SDL_Texture*, 9> nextTextures{};
-    std::array<bool, 9> reused{};
-    for (std::size_t slot = 0; slot < nextTextures.size(); ++slot) {
-        if (desiredPaths[slot].empty()) continue;
-        // Most covers merely move by one slot. Reuse their decoded textures
-        // instead of destroying and decoding them on every navigation press.
-        bool matched = false;
-        for (std::size_t old = 0; old < flowTextures_.size(); ++old) {
-            if (!reused[old] && loadedFlowPaths_[old] == desiredPaths[slot]) {
-                nextTextures[slot] = std::exchange(flowTextures_[old], nullptr);
-                reused[old] = true;
-                matched = true;
-                break;
-            }
-        }
-        if (!matched) nextTextures[slot] = loadCoverTexture(desiredPaths[slot]);
-    }
-    for (auto* texture : flowTextures_) SDL_DestroyTexture(texture);
-    flowTextures_ = nextTextures;
     loadedFlowPaths_ = std::move(desiredPaths);
+    // Decode the selection first, then immediate neighbors. Do not queue stale
+    // work when the user scrolls quickly; one worker serves the current view.
+    for (const int slot : {4, 3, 5, 2, 6, 1, 7, 0, 8})
+        flowTextures_[slot] = loadCoverTexture(loadedFlowPaths_[slot]);
 }
 
-float SdlRenderer::coverFlowOffset(Uint32 now) const {
-    if (!flowAnimationActive_) return 0.0F;
-    const float progress = std::min(1.0F,
-        static_cast<float>(now - flowAnimationStartedAt_) / static_cast<float>(flowAnimationDurationMs_));
-    const float remaining = 1.0F - progress;
-    return flowAnimationStartOffset_ * remaining * remaining * remaining;
+float SdlRenderer::coverFlowOffset(Uint32 now) {
+    flowMotion_.advance(static_cast<double>(now - flowUpdatedAt_) / 1000.0);
+    flowUpdatedAt_ = now;
+    return static_cast<float>(flowMotion_.offset());
 }
 
 void SdlRenderer::drawText(const char* text, int x, int y, SDL_Color color, TTF_Font* font) {
     TTF_Font* activeFont = font != nullptr ? font : font_;
-    SDL_Surface* surface = TTF_RenderUTF8_Blended(activeFont, text, color);
-    if (surface == nullptr) {
-        return;
+    const auto key = std::make_pair(activeFont, std::string(text));
+    auto found = textCache_.find(key);
+    if (found == textCache_.end()) {
+        SDL_Surface* surface = TTF_RenderUTF8_Blended(activeFont, text, SDL_Color{255, 255, 255, 255});
+        if (!surface) return;
+        SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer_, surface);
+        const int width = surface->w, height = surface->h;
+        SDL_FreeSurface(surface);
+        if (!texture) return;
+        if (textCache_.size() >= 64) {
+            const auto oldest = std::min_element(textCache_.begin(), textCache_.end(),
+                [](const auto& a, const auto& b) { return a.second.used < b.second.used; });
+            SDL_DestroyTexture(oldest->second.texture);
+            textCache_.erase(oldest);
+        }
+        found = textCache_.emplace(key, CachedText{texture, width, height, 0}).first;
     }
-    SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer_, surface);
-    if (texture != nullptr) {
-        const SDL_Rect destination{x, y, surface->w, surface->h};
-        SDL_RenderCopy(renderer_, texture, nullptr, &destination);
-        SDL_DestroyTexture(texture);
-    }
-    SDL_FreeSurface(surface);
+    auto& cached = found->second;
+    cached.used = ++textUse_;
+    SDL_SetTextureColorMod(cached.texture, color.r, color.g, color.b);
+    SDL_SetTextureAlphaMod(cached.texture, color.a);
+    const SDL_Rect destination{x, y, cached.width, cached.height};
+    SDL_RenderCopy(renderer_, cached.texture, nullptr, &destination);
 }
 
 void SdlRenderer::drawFittedText(const std::string& text, int x, int y, int maxCharacters, SDL_Color color, TTF_Font* font) {
@@ -325,29 +392,36 @@ void SdlRenderer::drawCoverTexture(SDL_Texture* texture, int x, int y, int width
     SDL_SetTextureColorMod(texture,brightness,brightness,brightness);SDL_RenderCopyEx(renderer_,texture,nullptr,&destination,angle,nullptr,SDL_FLIP_NONE);SDL_SetTextureColorMod(texture,255,255,255);
 }
 
-void SdlRenderer::drawPerspectiveCover(SDL_Texture* texture, float offset, Uint8 brightness, Uint8 alpha, bool reflection) {
-    const float distance = std::min(4.0F, std::abs(offset));
+void SdlRenderer::drawPerspectiveCover(SDL_Texture* texture, float offset, Uint8 brightness, Uint8 alpha) {
+    const float distance = std::min(5.0F, std::abs(offset));
     const float sideDistance = std::min(1.0F, distance);
     const float direction = offset < 0.0F ? -1.0F : 1.0F;
+    // A rotating plane under a pinhole camera. Continuous at the middle
+    // and first side slot, without the old pow() acceleration kink.
     const float travel = (distance <= 1.0F
-        ? 154.0F * std::pow(distance, 0.72F)
-        : 154.0F + (distance - 1.0F) * 44.0F) * static_cast<float>(uiWidth_) / 640.0F;
+        ? 158.0F * distance + 110.0F * distance * distance * (1.0F - distance)
+        : 158.0F + (distance - 1.0F) * 48.0F) * static_cast<float>(uiWidth_) / 640.0F;
     const float centerX = static_cast<float>(uiWidth_) * 0.5F + direction * travel;
-    const float coverHeight = 218.0F - 19.0F * sideDistance;
-    const float top = 91.0F + 10.0F * sideDistance;
-    const float turn = std::min(0.88F, distance * 0.82F);
-    const float faceWidth = 218.0F - 14.0F * sideDistance;
-    const float visibleWidth = faceWidth * (1.0F - 0.69F * turn);
-    const float left = centerX - visibleWidth * 0.5F;
-    const float right = centerX + visibleWidth * 0.5F;
-    const float edgeInset = coverHeight * 0.16F * turn;
-    const float topLeft = top + (offset < 0.0F ? edgeInset : 0.0F);
-    const float topRight = top + (offset > 0.0F ? edgeInset : 0.0F);
-    const float bottomLeft = top + coverHeight - (offset < 0.0F ? edgeInset : 0.0F);
-    const float bottomRight = top + coverHeight - (offset > 0.0F ? edgeInset : 0.0F);
+    const float smoothTurn = sideDistance * sideDistance * (3.0F - 2.0F * sideDistance);
+    const float angle = direction * smoothTurn * 0.98F;
+    const float depth = 1.0F + 0.13F * distance;
+    const float halfSize = view_.items.size() == 1 ? 132.0F : 128.0F;
+    constexpr float focalLength = 520.0F;
+    constexpr float centerY = 214.0F;
+    const auto project = [&](float u) {
+        const float localX = (u * 2.0F - 1.0F) * halfSize;
+        const float scale = focalLength / (focalLength * depth - localX * std::sin(angle));
+        return std::array<float, 3>{centerX + localX * std::cos(angle) * scale,
+            centerY - halfSize * scale, centerY + halfSize * scale};
+    };
+    const auto leftEdge = project(0.0F);
+    const auto rightEdge = project(1.0F);
+    const float left = leftEdge[0], right = rightEdge[0];
+    const float topLeft = leftEdge[1], topRight = rightEdge[1];
+    const float bottomLeft = leftEdge[2], bottomRight = rightEdge[2];
+    const float visibleWidth = right - left;
 
     if (texture == nullptr) {
-        if (reflection) return;
         SDL_SetRenderDrawColor(renderer_, 38, 45, 57, alpha);
         const int columns = std::max(1, static_cast<int>(right - left));
         for (int column = 0; column <= columns; ++column) {
@@ -368,6 +442,42 @@ void SdlRenderer::drawPerspectiveCover(SDL_Texture* texture, float offset, Uint8
     SDL_SetTextureColorMod(texture, brightness, brightness, brightness);
     SDL_SetTextureAlphaMod(texture, alpha);
 
+    if (distance < 0.001F) {
+        const SDL_Rect target{int(std::lround(left)), int(std::lround(topLeft)),
+            int(std::lround(visibleWidth)), int(std::lround(bottomLeft - topLeft))};
+        SDL_RenderCopy(renderer_, texture, nullptr, &target);
+        SDL_SetTextureAlphaMod(texture, 255);
+        SDL_SetTextureColorMod(texture, 255, 255, 255);
+        return;
+    }
+
+    if (renderGeometry_) {
+    // Small subdivided mesh: approximate perspective-correct UVs without a
+    // custom OpenGL context. One SDL draw per cover instead of ~200 strips.
+    constexpr int strips = 24;
+    std::array<CoverVertex, (strips + 1) * 2> vertices{};
+    std::array<int, strips * 6> indices{};
+    for (int strip = 0; strip <= strips; ++strip) {
+        const float u = static_cast<float>(strip) / strips;
+        const auto point = project(u);
+        float top = point[1], bottom = point[2];
+        vertices[strip * 2] = {{point[0], top}, {brightness, brightness, brightness, alpha}, {u, 0.0F}};
+        vertices[strip * 2 + 1] = {{point[0], bottom},
+            {brightness, brightness, brightness, alpha}, {u, 1.0F}};
+        if (strip < strips) {
+            const int base = strip * 2;
+            const std::array<int, 6> quad{base, base + 1, base + 2, base + 2, base + 1, base + 3};
+            std::copy(quad.begin(), quad.end(), indices.begin() + strip * 6);
+        }
+    }
+    if (renderGeometry_(renderer_, texture, vertices.data(), static_cast<int>(vertices.size()),
+            indices.data(), static_cast<int>(indices.size())) == 0) {
+        SDL_SetTextureAlphaMod(texture, 255);
+        SDL_SetTextureColorMod(texture, 255, 255, 255);
+        return;
+    }
+    }
+    // Older SDL versions/backends retain the scanline fallback.
     const int sliceCount = std::min(sourceWidth, std::max(32, static_cast<int>(visibleWidth)));
     for (int slice = 0; slice < sliceCount; ++slice) {
         const float t0 = static_cast<float>(slice) / sliceCount;
@@ -375,22 +485,17 @@ void SdlRenderer::drawPerspectiveCover(SDL_Texture* texture, float offset, Uint8
         const int sourceX0 = static_cast<int>(sourceWidth * t0);
         const int sourceX1 = std::max(sourceX0 + 1, static_cast<int>(sourceWidth * t1));
         SDL_Rect source{sourceX0, 0, std::min(sourceWidth, sourceX1) - sourceX0, sourceHeight};
-        const float x0 = left + (right - left) * t0;
-        const float x1 = left + (right - left) * t1;
-        float y0 = topLeft + (topRight - topLeft) * t0;
-        float y1 = bottomLeft + (bottomRight - bottomLeft) * t0;
-        if (reflection) {
-            const float base = std::max(bottomLeft, bottomRight) + 4.0F;
-            const float reflectionHeight = 42.0F - sideDistance * 5.0F;
-            y0 = base;
-            y1 = base + reflectionHeight;
-        }
+        const auto start = project(t0);
+        const auto end = project(t1);
+        const float x0 = start[0], x1 = end[0];
+        float y0 = start[1];
+        float y1 = start[2];
         SDL_Rect destination{
             static_cast<int>(std::floor(x0)), static_cast<int>(std::floor(y0)),
             std::max(1, static_cast<int>(std::ceil(x1)) - static_cast<int>(std::floor(x0))),
             std::max(1, static_cast<int>(std::ceil(y1 - y0)))};
         SDL_RenderCopyEx(renderer_, texture, &source, &destination, 0.0, nullptr,
-            reflection ? SDL_FLIP_VERTICAL : SDL_FLIP_NONE);
+            SDL_FLIP_NONE);
     }
     SDL_SetTextureAlphaMod(texture, 255);
     SDL_SetTextureColorMod(texture, 255, 255, 255);
@@ -404,61 +509,25 @@ void SdlRenderer::renderCoverFlow() {
     const auto count = view_.items.size();
     const Uint32 now = SDL_GetTicks();
     const float animationOffset = coverFlowOffset(now);
-    if (flowAnimationActive_ && now - flowAnimationStartedAt_ >= flowAnimationDurationMs_)
-        flowAnimationActive_ = false;
     constexpr int centerSlot = 4;
     std::vector<int> slots;
     for (int slot = 0; slot < static_cast<int>(flowTextures_.size()); ++slot) {
-        if (flowTextures_[static_cast<std::size_t>(slot)] != nullptr) slots.push_back(slot);
+        const auto index = static_cast<long long>(view_.selected) + slot - centerSlot;
+        if (index >= 0 && index < static_cast<long long>(count)) slots.push_back(slot);
     }
     std::sort(slots.begin(), slots.end(), [&](int leftSlot, int rightSlot) {
         return std::abs(static_cast<float>(leftSlot - centerSlot) + animationOffset) >
             std::abs(static_cast<float>(rightSlot - centerSlot) + animationOffset);
     });
 
-    // Soft ambient glow centered behind the selected cover: many overlapping
-    // low-alpha rectangles read as a gentle spotlight instead of the flat
-    // black backdrop, giving the row a sense of depth before any cover is
-    // drawn on top of it.
-    SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
-    constexpr int glowRings = 22;
-    for (int ring = 0; ring < glowRings; ++ring) {
-        const float t = 1.0F - static_cast<float>(ring) / glowRings;
-        const int halfWidth = static_cast<int>(190.0F * t);
-        const int halfHeight = static_cast<int>(150.0F * t);
-        SDL_SetRenderDrawColor(renderer_, 40, 52, 56, 10);
-        const SDL_Rect band{uiWidth_ / 2 - halfWidth, 200 - halfHeight, halfWidth * 2, halfHeight * 2};
-        SDL_RenderFillRect(renderer_, &band);
-    }
+    const SDL_Rect artworkArea{0, 70, uiWidth_, 288};
+    SDL_RenderSetClipRect(renderer_, &artworkArea);
     for (const int slot : slots) {
         const float offset = static_cast<float>(slot - centerSlot) + animationOffset;
-        const Uint8 brightness = static_cast<Uint8>(std::clamp(245.0F - std::abs(offset) * 69.0F, 92.0F, 245.0F));
-        drawPerspectiveCover(flowTextures_[static_cast<std::size_t>(slot)], offset, brightness, 48, true);
+        const Uint8 brightness = static_cast<Uint8>(std::clamp(255.0F - std::abs(offset) * 42.0F, 100.0F, 255.0F));
+        drawPerspectiveCover(flowTextures_[static_cast<std::size_t>(slot)], offset, brightness, 255);
     }
-    SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
-    for (int row = 0; row < 46; ++row) {
-        SDL_SetRenderDrawColor(renderer_, 12, 15, 22, static_cast<Uint8>(35 + row * 4));
-        SDL_RenderDrawLine(renderer_, 0, 314 + row, uiWidth_ - 1, 314 + row);
-    }
-    for (const int slot : slots) {
-        const float offset = static_cast<float>(slot - centerSlot) + animationOffset;
-        const Uint8 brightness = static_cast<Uint8>(std::clamp(255.0F - std::abs(offset) * 64.0F, 94.0F, 255.0F));
-        drawPerspectiveCover(flowTextures_[static_cast<std::size_t>(slot)], offset, brightness, 255, false);
-    }
-    // Soft accent glow framing the centered cover, so the current selection
-    // reads clearly at a glance instead of only through size/brightness.
-    if (!flowAnimationActive_) {
-        SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
-        constexpr int ringCount = 6;
-        for (int ring = 0; ring < ringCount; ++ring) {
-            const int inset = 3 + ring * 2;
-            SDL_SetRenderDrawColor(renderer_, 92, 211, 151, static_cast<Uint8>(190 - ring * 28));
-            const SDL_Rect frame{uiWidth_ / 2 - 109 - inset, 91 - inset, 218 + 2 * inset, 218 + 2 * inset};
-            SDL_RenderDrawRect(renderer_, &frame);
-        }
-    }
-    SDL_SetRenderDrawColor(renderer_, 92, 211, 151, 215);
-    SDL_RenderDrawLine(renderer_, uiWidth_ / 2 - 107, 312, uiWidth_ / 2 + 107, 312);
+    SDL_RenderSetClipRect(renderer_, nullptr);
     const auto captionIndex = static_cast<std::size_t>(std::clamp(
         std::lround(static_cast<float>(view_.selected) - animationOffset), 0L,
         static_cast<long>(count - 1)));
@@ -467,7 +536,7 @@ void SdlRenderer::renderCoverFlow() {
     const auto detail = separator == std::string::npos ? std::string{} : view_.items[captionIndex].substr(separator + 1);
     int textWidth = 0, textHeight = 0;
     TTF_SizeUTF8(titleFont_, name.c_str(), &textWidth, &textHeight);
-    drawFittedText(name, std::max(20, (uiWidth_ - textWidth) / 2), 352, 38 + (uiWidth_ - 640) / 14, SDL_Color{244,247,251,255}, titleFont_);
+    drawFittedText(name, std::max(20, (uiWidth_ - textWidth) / 2), 362, 38 + (uiWidth_ - 640) / 14, SDL_Color{244,247,251,255}, titleFont_);
     const std::string meta = detail + "    " + std::to_string(captionIndex + 1) + "/" + std::to_string(count);
     TTF_SizeUTF8(font_, meta.c_str(), &textWidth, &textHeight);
     drawText(meta.c_str(), std::max(20, (uiWidth_ - textWidth) / 2), 394, SDL_Color{143,154,170,255});

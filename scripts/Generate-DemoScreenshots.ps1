@@ -3,7 +3,8 @@ param(
     [string]$CoverSource,
     [string]$OutputDirectory,
     [ValidateSet('de', 'en')]
-    [string]$Language = 'de'
+    [string]$Language = 'de',
+    [switch]$IncludeGif
 )
 
 $ErrorActionPreference = 'Stop'
@@ -19,7 +20,7 @@ if ([string]::IsNullOrWhiteSpace($OutputDirectory)) {
 $requiredCovers = @(
     '236.png', '237.png', '238.png', '239.png', '240.png',
     'kids-070.jpg', 'kids-071.jpg', 'kids-103.jpg', 'kids-086.jpg', 'kids-066.jpg',
-    'checkpod.jpg', 'hp-1.jpg', 'hp-2.jpg', 'hp-3.jpg', 'hp-4.jpg', 'hp-5.jpg',
+    'checkpod.jpg', 'sherlock-1.jpg', 'sherlock-2.jpg', 'sherlock-3.jpg', 'sherlock-4.jpg', 'sherlock-5.jpg',
     'music-foo.jpg', 'music-linkin.jpg', 'music-rhcp.jpg', 'music-acdc.jpg', 'music-stones.jpg'
 )
 foreach ($name in $requiredCovers) {
@@ -28,9 +29,13 @@ foreach ($name in $requiredCovers) {
     }
 }
 
+$gifPython = (Get-Command python.exe -ErrorAction SilentlyContinue).Source
+if ($IncludeGif -and !$gifPython) { throw 'Python with Pillow is required for GIF encoding.' }
+
 $msysBin = 'C:\msys64\ucrt64\bin'
 $cmake = Join-Path $msysBin 'cmake.exe'
 if (!(Test-Path -LiteralPath $cmake)) { throw "CMake not found: $cmake" }
+$previousPath = $env:Path
 $env:Path = "$msysBin;$env:Path"
 Push-Location $repositoryRoot
 try {
@@ -40,13 +45,16 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Screenshot tool build failed.' }
 } finally {
     Pop-Location
+    $env:Path = $previousPath
 }
 
 $rawDirectory = Join-Path $repositoryRoot "build/screenshots/demo-raw-$Language"
 $toolDirectory = Join-Path $repositoryRoot 'build/desktop-debug'
 $tool = Join-Path $toolDirectory 'coverplayer_screenshot_tool.exe'
 New-Item -ItemType Directory -Force -Path $rawDirectory, $OutputDirectory | Out-Null
-$renderProcess = Start-Process -FilePath $tool -ArgumentList @(('"{0}"' -f $rawDirectory), ('"{0}"' -f $CoverSource), $Language) `
+$renderArgs = @(('"{0}"' -f $rawDirectory), ('"{0}"' -f $CoverSource), $Language)
+if ($IncludeGif) { $renderArgs += '--animation' }
+$renderProcess = Start-Process -FilePath $tool -ArgumentList $renderArgs `
     -WorkingDirectory $toolDirectory -Wait -PassThru -WindowStyle Hidden
 if ($renderProcess.ExitCode -ne 0) { throw "Demo rendering failed with exit code $($renderProcess.ExitCode)." }
 
@@ -62,3 +70,8 @@ foreach ($screenshot in $screenshots) {
 Copy-Item -LiteralPath (Join-Path $OutputDirectory '01-coverflow.png') `
     -Destination (Join-Path $OutputDirectory 'coverplayer-coverflow.png') -Force
 Write-Host "Saved $($screenshots.Count) CoverPlayer demo screenshots to $OutputDirectory"
+
+if ($IncludeGif) {
+    & $gifPython (Join-Path $PSScriptRoot 'create-demo-gif.py') (Join-Path $rawDirectory 'animation') (Join-Path $OutputDirectory 'coverplayer-coverflow.gif')
+    if ($LASTEXITCODE -ne 0) { throw 'GIF encoding failed.' }
+}

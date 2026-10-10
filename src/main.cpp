@@ -3,6 +3,8 @@
 #include "persistence/file_progress_store.hpp"
 #include "persistence/file_library_cache.hpp"
 #include "platform/sdl/linux_background_session.hpp"
+#include "platform/sdl/audio_ducker.hpp"
+#include "platform/sdl/playback_power.hpp"
 #include "platform/sdl/sdl_platform.hpp"
 #include "platform/native_file_system.hpp"
 
@@ -33,7 +35,8 @@ int runBackgroundAudio(const std::vector<std::string>& trackPaths, std::size_t s
     }
     coverplayer::audio::Mpg123SdlPlayer audioPlayer;
     coverplayer::persistence::FileProgressStore progressStore;
-    bool ducked = false;
+    coverplayer::platform::PlaybackPower power(false);
+    bool guardianStarted = false;
     for (std::size_t index = startIndex; index < trackPaths.size(); ++index) {
         const auto& mediaPath = trackPaths[index];
         if (!audioPlayer.open(mediaPath)) {
@@ -41,17 +44,11 @@ int runBackgroundAudio(const std::vector<std::string>& trackPaths, std::size_t s
                 << audioPlayer.error() << '\n';
             break;
         }
+        power.playback(true);
         coverplayer::platform::LinuxBackgroundSession::recordRunning(mediaPath);
-        if (!ducked) {
-            // Ramp everything else down so a backgrounded audiobook/radio
-            // play stays intelligible under a game's sound, instead of
-            // getting drowned out by it (COVERPLAYER_DUCK_PERCENT, default
-            // 50). Only once per session, not per track - and ticking the
-            // just-opened audioPlayer between ramp steps keeps its short
-            // pre-queued buffer fed while this call is otherwise blocking
-            // on `pactl`/sleeps for several hundred milliseconds.
-            coverplayer::platform::LinuxBackgroundSession::duckOtherAudio([&]() { audioPlayer.update(); });
-            ducked = true;
+        if (!guardianStarted) {
+            coverplayer::platform::startAudioDucker();
+            guardianStarted = true;
         }
         if (const auto progress = progressStore.load(mediaPath)) {
             if (!progress->completed && progress->positionSeconds > 0.0) {
@@ -61,6 +58,7 @@ int runBackgroundAudio(const std::vector<std::string>& trackPaths, std::size_t s
         auto lastSave = std::chrono::steady_clock::now();
         while (!audioPlayer.isFinished()) {
             audioPlayer.update();
+            power.tick(SDL_GetTicks());
             if (std::chrono::steady_clock::now() - lastSave >= std::chrono::seconds(5)) {
                 progressStore.save(mediaPath, {audioPlayer.positionSeconds(), false});
                 lastSave = std::chrono::steady_clock::now();
@@ -69,11 +67,7 @@ int runBackgroundAudio(const std::vector<std::string>& trackPaths, std::size_t s
         }
         progressStore.save(mediaPath, {audioPlayer.positionSeconds(), true});
     }
-    // Only restore what duckOtherAudio() actually lowered - if the very
-    // first track failed to open, nothing was ever ducked, and ramping
-    // "back up" to 100% would instead ramp everything else down and back up
-    // as a spurious, audible dip.
-    if (ducked) coverplayer::platform::LinuxBackgroundSession::restoreOtherAudio();
+    power.playback(false);
     SDL_Quit();
     return 0;
 }
@@ -81,6 +75,17 @@ int runBackgroundAudio(const std::vector<std::string>& trackPaths, std::size_t s
 } // namespace
 
 int main(int argc, char** argv) {
+    if (argc == 3 && std::string(argv[1]) == "--playback-power") {
+        char* end = nullptr; const long owner = std::strtol(argv[2], &end, 10);
+        if (end == argv[2] || *end != '\0') return 1;
+        return coverplayer::platform::PlaybackPower::watch(owner);
+    }
+    if (argc == 3 && std::string(argv[1]) == "--audio-ducking") {
+        char* end = nullptr;
+        const long owner = std::strtol(argv[2], &end, 10);
+        if (end == argv[2] || *end != '\0') return 1;
+        return coverplayer::platform::runAudioDucker(owner);
+    }
     if (argc >= 4 && std::string(argv[1]) == "--background-audio") {
         std::size_t startIndex = 0;
         try {
@@ -109,9 +114,9 @@ int main(int argc, char** argv) {
         // running detached and unreachable - and, crucially, before this
         // session could ever background a *different* track and end up
         // with two helpers playing at once.
-        if (initialMediaPath.empty()) {
+        {
             if (const auto backgroundedPath = coverplayer::platform::LinuxBackgroundSession::takeOverIfRunning()) {
-                initialMediaPath = *backgroundedPath;
+                if (initialMediaPath.empty()) initialMediaPath = *backgroundedPath;
                 std::cerr << "CoverPlayer: took over background playback of '" << initialMediaPath << "'\n";
             }
         }

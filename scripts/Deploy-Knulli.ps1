@@ -4,6 +4,7 @@ param(
     [string]$User = 'root',
     [string]$Password,
     [switch]$IncludeTest,
+    [switch]$TestOnly,
     [switch]$Build,
     [switch]$PreflightOnly
 )
@@ -36,10 +37,13 @@ if ($Build) {
     if ($LASTEXITCODE -ne 0) { throw 'Build and tests failed.' }
 }
 
+if ($TestOnly -and $IncludeTest) { throw 'Choose -TestOnly or -IncludeTest, not both.' }
+
 $packages = @(
     [pscustomobject]@{ Name = 'CoverPlayer-Knulli.zip'; Remote = '/tmp/CoverPlayer-Knulli.zip'; App = 'CoverPlayer' }
 )
-if ($IncludeTest) {
+if ($TestOnly) { $packages = @() }
+if ($IncludeTest -or $TestOnly) {
     $packages += [pscustomobject]@{ Name = 'CoverPlayer-Knulli-Test.zip'; Remote = '/tmp/CoverPlayer-Knulli-Test.zip'; App = 'CoverPlayer-Test' }
 }
 
@@ -81,7 +85,7 @@ foreach ($target in $Targets) {
     if ($hostKeys.ContainsKey($target)) { $hostKeyArgs = @('-hostkey', $hostKeys[$target]) }
     Write-Host "Deploying CoverPlayer to $target..."
 
-    & $plink @('-batch', '-ssh') @hostKeyArgs @('-pw', $Password, "$User@$target", 'set -e; command -v unzip >/dev/null; if pgrep -x coverplayer >/dev/null; then echo "CoverPlayer is still running" >&2; exit 4; fi') | Out-Null
+    & $plink @('-batch', '-ssh') @hostKeyArgs @('-pw', $Password, "$User@$target", 'set -e; command -v unzip >/dev/null; if ps -eo args= | grep -Eq "^([^ ]*/)?coverplayer( |$)"; then echo "CoverPlayer is still running" >&2; exit 4; fi') | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "Cannot connect to $target or unzip is unavailable." }
 
     foreach ($package in $packages) {
@@ -100,6 +104,17 @@ foreach ($target in $Targets) {
     }
 
     $remoteSteps = @('set -e')
+    if ($TestOnly) {
+        # Pause only running Syncthing processes, and resume them even on failure.
+        $remoteSteps += 'ps -eo args= | grep -Eq "^([^ ]*/)?coverplayer( |$)" && exit 4'
+        $remoteSteps += 'sync_pids=""'
+        $remoteSteps += 'trap ''for pid in $sync_pids; do kill -CONT "$pid" 2>/dev/null || true; done'' EXIT HUP INT TERM'
+        $remoteSteps += 'for pid in $(pidof syncthing 2>/dev/null); do state=$(awk ''{print $3}'' /proc/$pid/stat); case "$state" in T|t) ;; *) kill -STOP "$pid"; sync_pids="$sync_pids $pid" ;; esac; done'
+        $remoteSteps += 'mkdir -p /userdata/system/coverplayer-backups'
+        $remoteSteps += 'backup=/userdata/system/coverplayer-backups/CoverPlayer-Test-$(date +%Y%m%d-%H%M%S)-$$.tar.gz'
+        $remoteSteps += 'cd /userdata/roms/ports'
+        $remoteSteps += 'set --; for item in roms/ports/CoverPlayer-Test roms/ports/CoverPlayer-Test.sh system/configs/coverplayer-test; do if [ -e "/userdata/$item" ]; then set -- "$@" "$item"; fi; done; if [ "$#" -gt 0 ]; then tar -C /userdata -czf "$backup" "$@"; tar -tzf "$backup" >/dev/null; echo "Backup: $backup"; fi'
+    }
     foreach ($package in $packages) {
         $remoteSteps += "unzip -o $($package.Remote) -d /userdata >/dev/null"
         $remoteSteps += 'cd /userdata'

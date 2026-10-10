@@ -63,25 +63,6 @@ public:
     // Only signal it when /proc/<pid>/cmdline identifies our audio helper.
     static bool isBackgroundHelperCommandLine(const std::string& commandLine);
 
-    // Lowers every other PulseAudio stream (a game, EmulationStation itself,
-    // anything not this binary) to COVERPLAYER_DUCK_PERCENT of its current
-    // level (default 50), ramped over ~700ms rather than jumped, so a
-    // backgrounded audiobook stays intelligible under game sound. Called
-    // once by the helper right after it starts playing the first track (not
-    // repeated on every subsequent track within the same album). onTick, if
-    // given, is invoked between ramp steps - the helper uses this to keep
-    // pumping its own already-open audio player so its short pre-queued
-    // buffer does not run dry while this call is otherwise blocking on
-    // `pactl`/sleeps for several hundred milliseconds.
-    static void duckOtherAudio(const std::function<void()>& onTick = {});
-
-    // Ramps every other stream back up to 100%, the same way. Always
-    // restores to a fixed 100% rather than a remembered prior value -
-    // simpler, and robust against the helper being killed (SIGKILL, see
-    // stopIfRunning in the .cpp) before it could restore anything itself.
-    // Called by the helper before it exits normally, and by whatever stops
-    // an existing helper (spawning a replacement, or the GUI taking over).
-    static void restoreOtherAudio(const std::function<void()>& onTick = {});
 };
 
 } // namespace coverplayer::platform

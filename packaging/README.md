@@ -1,51 +1,60 @@
-# CoverPlayer 0.1.0
+# CoverPlayer
 
-Offline audio player for Knulli and muOS handhelds. Add folders as named
-collections for audiobooks, radio plays, podcasts, or music. No audio files
-or cover images are included in this package.
+Offline MP3 playback for Knulli and muOS. Media files and original artwork are
+not included. [Project and downloads](https://github.com/heilmic/CoverPlayer).
 
 ## Install
 
-- Knulli: extract `CoverPlayer-Knulli.zip` into the root of the Knulli share
-  or SD card so that `roms/ports/CoverPlayer.sh` and
-  `roms/ports/CoverPlayer/` are both present. Refresh the ports list.
-- Knulli test port: extract `CoverPlayer-Knulli-Test.zip` in the same way;
-  it installs beside the production port under a separate name.
-- muOS: install `CoverPlayer.muxapp` using the muOS application installer.
+| Firmware | Package | Installation |
+| --- | --- | --- |
+| Knulli | `CoverPlayer-Knulli.zip` | Extract into the share or SD root; refresh the ports list. |
+| Knulli Test | `CoverPlayer-Knulli-Test.zip` | Extract the same way; installs beside the regular app. |
+| muOS | `CoverPlayer.muxapp` | Use the muOS application installer. |
 
-The application stores collections, bookmarks, progress, and library cache
-outside its installation folder. Replacing the application does not require
-deleting those files or any media directory.
+On Knulli, both `roms/ports/CoverPlayer.sh` and `roms/ports/CoverPlayer/` must
+exist (or their Test equivalents). Saved collections, bookmarks, progress and
+cache live outside the installation folder. Keep them and your media when updating.
 
 ## Controls
 
-- A opens the selected item or pauses/resumes playback.
-- B goes back one screen; it does not exit from the collection screen.
-- Select opens help. B or Select closes help.
-- The bottom bar always shows Select = Help. While help is open, Y switches
-  between German and English; the selection is saved.
-- X scans the library again on collection and CoverFlow/list screens.
-  The scan refreshes every configured collection.
-- Y switches between CoverFlow and list where folders are shown.
-- On the player, Left/Right seek 10 seconds; L1/R1 seek 30 seconds;
-  Up/Down select the previous or next track.
-- On the player, a short START release cycles the sleep timer. Holding START
-  for two seconds exits the interface and keeps a playing album running in
-  the background on Knulli or muOS. START+SELECT exits immediately.
+| Button | Action |
+| --- | --- |
+| A | Open selection; pause/resume on the player |
+| B | Back; does not exit from the collection screen |
+| Select | Context help; B or Select closes it |
+| Y | Add a collection; switch CoverFlow/list in the library; switch language in help |
+| X | Rescan all configured collections from collection/library screens |
+| Left / Right | Seek 10 seconds on the player |
+| L1 / R1 | Seek 30 seconds on the player |
+| Up / Down | Previous/next track on the player |
+| Start, short press | Cycle sleep timer on the player |
+| Start, hold 2 seconds | Leave with background playback on Knulli/muOS |
+| Start + Select | Exit without background playback |
 
-The background playback helper on Knulli and muOS can continue while other
-software is open. A game launched afterward may need its own volume lowered
-in RetroArch. Reopening CoverPlayer takes playback back into the interface.
+Reopen CoverPlayer to take background playback back into the interface. Knulli
+lowers other server-visible audio streams to half their original amplitude
+(about -6 dB). muOS game volume may need manual adjustment.
 
-Bluetooth management on Knulli lists already paired devices. Pair new
-headphones in Knulli's system menu first. Bluetooth management is currently
-unavailable on muOS.
+## Screen and Bluetooth
+
+During playback, supported firmware adapters protect audio from automatic
+idle mute/suspend. The foreground display dims fully after 60 seconds; the
+first press wakes it. Pause, playback end and Sleep Timer expiry release the
+protection. Background playback never dims another app. Firmware settings stay
+unchanged. The newer muOS power adapter still needs hardware validation.
+
+Pair headphones in Knulli's system menu first; CoverPlayer manages already
+paired devices. Bluetooth management is unavailable on muOS.
 
 ## Troubleshooting
 
-Knulli writes the app log to `/userdata/system/logs/coverplayer.log`.
-muOS writes it to `MUOS/log/coverplayer.log` on the application storage card.
-Keep the media files and saved application data when replacing a package.
+- Knulli logs: `/userdata/system/logs/coverplayer.log` or `coverplayer-test.log`.
+- muOS log: `MUOS/log/coverplayer.log` on application storage.
+- Knulli ducking: `COVERPLAYER_DUCK_PERCENT=50` by default (0–100);
+  `COVERPLAYER_AUDIO_DUCKING=0` disables it. Direct ALSA streams are outside it.
+- `COVERPLAYER_DIM_SECONDS` sets the foreground dim timeout (1–3600 seconds).
+- Intermittent Bluetooth audio stutter is under investigation; a clean audio
+  log does not rule it out.
 
-CoverPlayer is licensed under Apache-2.0; see `LICENSE`. Bundled third-party
-components and notices are listed in `THIRD_PARTY_NOTICES.md`.
+See the repository's `docs/README.md` for architecture, compatibility and
+recovery limitations. License: `LICENSE`; dependencies: `THIRD_PARTY_NOTICES.md`.
