@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="320" viewBox="0 0 240 320">
+  <title>CoverPlayer portable MP3 player</title>
+  <rect x="28" y="8" width="184" height="304" rx="28" fill="none" stroke="#ffffff" stroke-width="12"/>
+  <rect x="52" y="38" width="136" height="110" rx="10" fill="none" stroke="#ffffff" stroke-width="8"/>
+  <path d="M112 59v51c-8-5-23-1-23 10 0 16 31 15 31-2V83l33-7v24c-8-5-23-1-23 10 0 16 31 15 31-2V49z" fill="#ffffff"/>
+  <circle cx="120" cy="226" r="49" fill="none" stroke="#ffffff" stroke-width="8"/>
+  <path d="m110 207 29 19-29 19z" fill="#ffffff"/>
+</svg>

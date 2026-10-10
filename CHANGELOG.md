@@ -6,6 +6,11 @@ CoverPlayer reaches its first stable milestone: an offline MP3 player for
 music, audiobooks, radio plays and podcasts on handheld gaming systems.
 Knulli is the primary platform, with muOS packages also available.
 
+Packaging addendum: `CoverPlayer-Knulli-Category.zip` is a complete alternative
+Knulli download with a dedicated main-menu category, illustrated setup guide
+and optional Art Book Next SVG player icon. It reuses the unchanged 1.0.0
+regular app and saved data. [Setup and screenshots](docs/knulli-category.md).
+
 ### Highlights
 
 - **Fluid CoverFlow on H700:** continuous motion through rapid taps and direction

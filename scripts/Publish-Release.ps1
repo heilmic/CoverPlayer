@@ -53,6 +53,7 @@ try {
     $assets = @(
         (Join-Path $releaseRoot 'CoverPlayer-Knulli.zip'),
         (Join-Path $releaseRoot 'CoverPlayer-Knulli-Test.zip'),
+        (Join-Path $releaseRoot 'CoverPlayer-Knulli-Category.zip'),
         (Join-Path $releaseRoot 'CoverPlayer.muxapp')
     )
     foreach ($asset in $assets) {

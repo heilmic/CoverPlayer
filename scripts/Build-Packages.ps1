@@ -129,4 +129,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Production Knulli archive verification failed.
 & $python "$PSScriptRoot/verify-package.py" "$releaseRoot/CoverPlayer.muxapp"
 if ($LASTEXITCODE -ne 0) { throw 'muOS archive verification failed.' }
 
-Get-FileHash -Algorithm SHA256 "$releaseRoot/CoverPlayer-Knulli.zip","$releaseRoot/CoverPlayer-Knulli-Test.zip","$releaseRoot/CoverPlayer.muxapp"
+& $python "$PSScriptRoot/build-knulli-category.py"
+if ($LASTEXITCODE -ne 0) { throw 'Knulli category archive creation failed.' }
+
+Get-FileHash -Algorithm SHA256 "$releaseRoot/CoverPlayer-Knulli.zip","$releaseRoot/CoverPlayer-Knulli-Test.zip","$releaseRoot/CoverPlayer-Knulli-Category.zip","$releaseRoot/CoverPlayer.muxapp"

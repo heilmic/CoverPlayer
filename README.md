@@ -29,6 +29,9 @@ muOS also supports library browsing and background playback.
 Hold **Start** for two seconds during playback to keep listening in the
 background. Reopen CoverPlayer to return to the player.
 
+Want a dedicated Knulli main-menu category? Use **CoverPlayer-Knulli-Category.zip**
+instead of the regular ZIP. [Setup, screenshot and optional player icon](docs/knulli-category.md).
+
 ## Screenshots
 
 | Music library | Audiobook playback |

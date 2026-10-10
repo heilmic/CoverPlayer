@@ -131,3 +131,55 @@ after 330 ms (110 ms steps, then 65 ms after 1.2 seconds); player actions stay
 single-step. Ten desktop tests and the ARM input regression test on .145 passed.
 Help screenshots and installation controls were updated. Physical stick feel
 and hold speed remain user acceptance checks.
+
+## Follow-up: dedicated CoverPlayer system in Knulli
+
+Tested on .145 with EmulationStation `scarab 2026/05/11 00:09`.
+Added `/userdata/system/configs/emulationstation/es_systems_coverplayer.cfg`
+as a user overlay, with system name/theme `coverplayer`, display name
+`CoverPlayer`, path `/userdata/roms/coverplayer` and extension `.sh`.
+The command reuses Knulli's Ports backend:
+
+```text
+emulatorlauncher %CONTROLLERSCONFIG% -system ports -emulator sh -core sh -rom %ROM% -gameinfoxml %GAMEINFOXML% -systemname %SYSTEMNAME%
+```
+
+`/userdata/roms/coverplayer/CoverPlayer.sh` is a wrapper executing
+`/bin/sh /userdata/roms/ports/CoverPlayer-Test.sh "$@"`. A small `gamelist.xml`
+names the entry CoverPlayer and explains that it launches the existing Test
+installation. No app files are duplicated. This is a device experiment;
+the release packages available at the time did not install the additional category.
+
+After a loopback `GET http://127.0.0.1:1234/reloadgames`, the systems API
+reported the category visible with one game. Launching its exact wrapper path
+via `POST /launch` started the existing Test binary through EmulationStation;
+both launches exited with status 0. Device screenshots confirmed the app,
+the category's game list and its main carousel tile. The active Art Book Next
+theme uses its default artwork and a CoverPlayer text logo. The device was
+left on that tile with no app running.
+
+Backup: `/userdata/system/coverplayer-backups/category-test-20261010-140526/`.
+Checksums confirmed `knulli.conf`, the stock `es_systems.cfg` and the Test
+binary unchanged. The existing Ports launchers remain installed. To undo,
+remove only the new overlay and the two files in `/userdata/roms/coverplayer`,
+remove the directory if empty, and reload the game list again. Do not restore
+the complete settings backup over subsequent user changes.
+
+## Follow-up: distributable category ZIP and SVG
+
+Added `CoverPlayer-Knulli-Category.zip` as a complete alternative built from
+the unchanged regular 1.0.0 Knulli ZIP. Its wrapper targets the regular app;
+the experimental category on .145 continues to target CoverPlayer-Test.
+The archive adds an illustrated guide and an original Apache-2.0 SVG under
+`/userdata/theme-customizations/art-book-next/logos/coverplayer.svg`.
+Art Book Next's System Logos setting was switched to Custom on .145, and
+the resulting main-menu tile was captured for the guide. Other theme settings
+were preserved; the ZIP does not change any theme settings automatically.
+
+During the theme test, restarting the frontend through the SSH service helper
+left overlapping standalone supervisors restarting EmulationStation. Stopping
+the service and its exact standalone supervisor processes, then starting one
+supervisor with detached standard streams, restored normal operation. The SVG
+then rendered correctly. Theme subset backup files use carriage-return
+delimiters; the active selection also lives in `es_settings.cfg`.
+The pre-icon settings backup remains beside the original category backup.

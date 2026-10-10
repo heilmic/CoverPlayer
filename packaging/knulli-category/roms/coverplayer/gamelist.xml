@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gameList>
+  <game>
+    <path>./CoverPlayer.sh</path>
+    <name>CoverPlayer</name>
+    <desc>Offline MP3 player for music, audiobooks and podcasts. Uses the same app and settings as the CoverPlayer entry under Ports.</desc>
+    <developer>heilmic</developer>
+    <genre>Music</genre>
+    <players>1</players>
+  </game>
+</gameList>

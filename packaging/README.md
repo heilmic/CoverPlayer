@@ -8,6 +8,7 @@ not included. [Project and downloads](https://github.com/heilmic/CoverPlayer).
 | Firmware | Package | Installation |
 | --- | --- | --- |
 | Knulli | `CoverPlayer-Knulli.zip` | Extract into the share or SD root; refresh the ports list. |
+| Knulli category | `CoverPlayer-Knulli-Category.zip` | Complete regular app with its own main-menu category; [guide and screenshots](https://github.com/heilmic/CoverPlayer/blob/main/docs/knulli-category.md). |
 | Knulli Test | `CoverPlayer-Knulli-Test.zip` | Extract the same way; installs beside the regular app. |
 | muOS | `CoverPlayer.muxapp` | Use the muOS application installer. |
 
