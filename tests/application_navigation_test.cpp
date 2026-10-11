@@ -7,6 +7,7 @@
 
 #include <iostream>
 #include <functional>
+#include <map>
 #include <optional>
 #include <utility>
 #include <vector>
@@ -18,6 +19,16 @@ public:
     std::size_t cursor = 0;
     std::function<void(std::size_t)> beforePoll;
     std::vector<bool> pausedStates;
+    std::vector<int> sleepTimers;
+    std::map<std::size_t, std::function<void()>> pollEffects;
+    std::size_t append(coverplayer::platform::InputActions action, std::function<void()> before = {}) {
+        const auto step = script.size();
+        script.push_back(std::move(action));
+        if (before) pollEffects.emplace(step, std::move(before));
+        return step;
+    }
+    const coverplayer::platform::ViewModel& viewAfter(std::size_t step) const { return views.at(step + 1); }
+    bool pausedAfter(std::size_t step) const { return pausedStates.at(step); }
     std::string name() const override { return "test"; }
     bool bluetoothAvailable = false;
     coverplayer::platform::BluetoothState bluetooth{};
@@ -32,10 +43,15 @@ public:
     bool enterBackgroundPlayback(const std::vector<std::string>& trackPaths, std::size_t startIndex) override {
         ++enterBackgroundCalls; lastBackgroundTrackPaths = trackPaths; lastBackgroundStartIndex = startIndex; return backgroundSupported;
     }
-    coverplayer::platform::InputActions pollEvents() override { if (beforePoll) beforePoll(cursor); return cursor < script.size() ? script[cursor++] : coverplayer::platform::InputActions{true}; }
+    coverplayer::platform::InputActions pollEvents() override {
+        if (beforePoll) beforePoll(cursor);
+        const auto effect = pollEffects.find(cursor);
+        if (effect != pollEffects.end()) effect->second();
+        return cursor < script.size() ? script[cursor++] : coverplayer::platform::InputActions{true};
+    }
     void setPlaybackStatus(bool, bool paused, double, double) override { pausedStates.push_back(paused); }
     void setView(coverplayer::platform::ViewModel view) override { views.push_back(std::move(view)); }
-    void setSleepTimer(int) override {}
+    void setSleepTimer(int minutes) override { sleepTimers.push_back(minutes); }
     void setPlayerDetails(int, std::size_t, std::string, std::optional<int>) override {}
     void setLanguage(coverplayer::Language language) override { activeLanguage = language; }
     std::optional<int> systemVolumePercent() const override { return std::nullopt; }
@@ -172,14 +188,50 @@ public:
     bool directoryExists(const std::string&) const override { return rootAvailable; }
 };
 
-int main() {
+namespace {
+using coverplayer::platform::InputActions;
+
+template<class T>
+InputActions input(T InputActions::*field, T value) {
+    InputActions action;
+    action.*field = std::move(value);
+    return action;
+}
+
+const auto rootBack = input(&InputActions::back, true);
+const auto openCollection = input(&InputActions::accept, true);
+const auto nextCover = input(&InputActions::navigate, 1);
+const auto openBook = input(&InputActions::accept, true);
+const auto play = input(&InputActions::accept, true);
+const auto quit = input(&InputActions::quit, true);
+const auto rescan = input(&InputActions::rescan, true);
+const auto previousAtStart = input(&InputActions::navigate, -1);
+const auto toggleView = input(&InputActions::toggleLibraryView, true);
+const auto manage = input(&InputActions::openFolders, true);
+const auto chooseAdd = input(&InputActions::accept, true);
+const auto chooseFolder = input(&InputActions::rescan, true);
+const auto selectPodcast = input(&InputActions::navigate, 3);
+const auto chooseType = input(&InputActions::accept, true);
+const auto clearName = input(&InputActions::clearText, true);
+const auto enterName = input(&InputActions::textInput, std::string("Podcasts"));
+const auto saveName = input(&InputActions::saveText, true);
+const auto selectExisting = input(&InputActions::navigate, 1);
+const auto editExisting = input(&InputActions::accept, true);
+const auto selectMusic = input(&InputActions::navigate, 2);
+const auto moveDown = input(&InputActions::reorder, 1);
+const auto requestDelete = input(&InputActions::deleteItem, true);
+const auto confirmDelete = input(&InputActions::accept, true);
+const auto openBluetooth = input(&InputActions::openBluetooth, true);
+const auto nextDevice = input(&InputActions::navigate, 1);
+const auto connectDevice = input(&InputActions::accept, true);
+const auto powerOff = input(&InputActions::toggleBluetooth, true);
+const auto requestBackground = input(&InputActions::background, true);
+const auto pauseTrack = input(&InputActions::togglePause, true);
+const auto switchLanguage = input(&InputActions::toggleLanguage, true);
+const auto previousRow = input(&InputActions::navigate, -1);
+
+int coverFlowResumeAndCollectionCover() {
     FakePlatform platform;
-    coverplayer::platform::InputActions rootBack; rootBack.back = true;
-    coverplayer::platform::InputActions openCollection; openCollection.accept = true;
-    coverplayer::platform::InputActions nextCover; nextCover.navigate = 1;
-    coverplayer::platform::InputActions openBook; openBook.accept = true;
-    coverplayer::platform::InputActions play; play.accept = true;
-    coverplayer::platform::InputActions quit; quit.quit = true;
     platform.script = {rootBack, openCollection, nextCover, openBook, play, quit};
     FakeAudio audio; FakeProgress progress; FakeCache cache; FakeFileSystem fileSystem;
     coverplayer::app::Application app(platform, &audio, &progress, cache, fileSystem, "unused", "");
@@ -195,6 +247,19 @@ int main() {
         return 1;
     }
 
+    bool sawCollectionFallback = false;
+    for (const auto& view : platform.views) {
+        if (view.screen == coverplayer::platform::Screen::Collections &&
+            !view.itemImages.empty() && view.itemImages.front() == "one.jpg") sawCollectionFallback = true;
+    }
+    if (!sawCollectionFallback) {
+        std::cerr << "Collection did not fall back to its first album cover\n";
+        return 1;
+    }
+    return 0;
+}
+
+int singleTrackResumeAndBack() {
     // A one-file audiobook must use exactly the same resume path as a
     // multi-track book. This guards the common long-single-MP3 layout.
     FakePlatform singleResumePlatform;
@@ -203,7 +268,7 @@ int main() {
     coverplayer::app::Application singleResumeApp(singleResumePlatform, &singleResumeAudio, &singleResumeProgress,
         singleResumeCache, singleResumeFileSystem, "unused", "");
     singleResumeApp.run();
-    if (singleResumeAudio.opened != "single.mp3" || singleResumeAudio.positionSeconds() != 88.0) {
+    if (singleResumeAudio.opened != "single.mp3" || singleResumeAudio.positionSeconds() != 88.0 || !singleResumeAudio.isPaused()) {
         std::cerr << "single-track audiobook did not resume at its saved position\n";
         return 1;
     }
@@ -217,11 +282,13 @@ int main() {
         std::cerr << "single-track audiobook showed the track list instead of returning to the album browser\n";
         return 1;
     }
+    return 0;
+}
 
+int rescanAllCollections() {
     // Explicit refresh currently means a complete library refresh: every
     // configured collection cache is invalidated and then loaded again.
     FakePlatform rescanPlatform;
-    coverplayer::platform::InputActions rescan; rescan.rescan = true;
     rescanPlatform.script = {rescan, quit};
     FakeAudio rescanAudio; MultipleCollectionProgress rescanProgress; CountingCache rescanCache; FakeFileSystem rescanFileSystem;
     coverplayer::app::Application rescanApp(rescanPlatform, &rescanAudio, &rescanProgress,
@@ -232,7 +299,10 @@ int main() {
         std::cerr << "explicit scan did not refresh every configured collection\n";
         return 1;
     }
+    return 0;
+}
 
+int singleCollectionSkipsPicker() {
     FakePlatform singlePlatform;singlePlatform.script={quit};
     FakeAudio singleAudio;FakeProgress singleProgress;FakeCache singleCache;FakeFileSystem singleFileSystem;
     coverplayer::app::Application singleApp(singlePlatform,&singleAudio,&singleProgress,singleCache,singleFileSystem,"unused","");
@@ -240,9 +310,11 @@ int main() {
     if(singlePlatform.views.empty()||singlePlatform.views.back().screen!=coverplayer::platform::Screen::CoverFlow){
         std::cerr<<"single available collection did not skip the collection picker\n";return 1;
     }
+    return 0;
+}
 
+int coverFlowStopsAtFirstItem() {
     FakePlatform boundaryPlatform;
-    coverplayer::platform::InputActions previousAtStart; previousAtStart.navigate = -1;
     boundaryPlatform.script = {rootBack, openCollection, previousAtStart, openBook, play, quit};
     FakeAudio boundaryAudio; FakeProgress boundaryProgress; FakeCache boundaryCache; FakeFileSystem boundaryFileSystem;
     coverplayer::app::Application boundaryApp(boundaryPlatform, &boundaryAudio, &boundaryProgress,
@@ -252,9 +324,11 @@ int main() {
         std::cerr << "CoverFlow wrapped past its first item instead of stopping\n";
         return 1;
     }
+    return 0;
+}
 
+int listTogglePreservesSelection() {
     FakePlatform listPlatform;
-    coverplayer::platform::InputActions toggleView; toggleView.toggleLibraryView = true;
     listPlatform.script = {rootBack, openCollection, toggleView, nextCover, openBook, rootBack, quit};
     FakeAudio listAudio; FakeProgress listProgress; FakeCache listCache; FakeFileSystem listFileSystem;
     coverplayer::app::Application listApp(listPlatform, &listAudio, &listProgress, listCache, listFileSystem, "unused", "");
@@ -267,7 +341,10 @@ int main() {
         std::cerr << "CoverFlow/list toggle lost the album selection or return view\n";
         return 1;
     }
+    return 0;
+}
 
+int nestedAlbumNavigation() {
     FakePlatform hierarchyPlatform;
     hierarchyPlatform.script = {rootBack, openCollection, openBook, nextCover, openBook, play, quit};
     FakeAudio hierarchyAudio; FakeProgress hierarchyProgress; HierarchicalCache hierarchyCache; FakeFileSystem hierarchyFileSystem;
@@ -283,17 +360,10 @@ int main() {
     if(!sawArtistLevel||!sawAlbumLevel||!sawLeafTracks||hierarchyAudio.opened!="two-2.mp3"||hierarchyAudio.positionSeconds()!=42.0){
         std::cerr<<"recursive browser did not keep CoverFlow above the leaf track list\n";return 1;
     }
+    return 0;
+}
 
-    bool sawCollectionFallback = false;
-    for (const auto& view : platform.views) {
-        if (view.screen == coverplayer::platform::Screen::Collections &&
-            !view.itemImages.empty() && view.itemImages.front() == "one.jpg") sawCollectionFallback = true;
-    }
-    if (!sawCollectionFallback) {
-        std::cerr << "Collection did not fall back to its first album cover\n";
-        return 1;
-    }
-
+int rootCoverOverridesFallback() {
     FakePlatform directCoverPlatform; directCoverPlatform.script = {rootBack,quit};
     FakeAudio directCoverAudio; FakeProgress directCoverProgress; FakeCache directCoverCache; FakeFileSystem directCoverFileSystem;
     directCoverFileSystem.provideRootCover = true;
@@ -305,7 +375,10 @@ int main() {
         std::cerr << "Collection root cover did not override the album fallback\n";
         return 1;
     }
+    return 0;
+}
 
+int missingCollectionRemainsVisible() {
     FakePlatform missingPlatform; missingPlatform.script = {quit};
     FakeAudio missingAudio; FakeProgress missingProgress; FakeCache missingCache; FakeFileSystem missingFileSystem;
     missingFileSystem.rootAvailable = false;
@@ -321,16 +394,11 @@ int main() {
         std::cerr << "Missing collection path was not surfaced in the library\n";
         return 1;
     }
+    return 0;
+}
 
+int addNamedCollection() {
     FakePlatform addPlatform;
-    coverplayer::platform::InputActions manage; manage.openFolders = true;
-    coverplayer::platform::InputActions chooseAdd; chooseAdd.accept = true;
-    coverplayer::platform::InputActions chooseFolder; chooseFolder.rescan = true;
-    coverplayer::platform::InputActions selectPodcast; selectPodcast.navigate = 3;
-    coverplayer::platform::InputActions chooseType; chooseType.accept = true;
-    coverplayer::platform::InputActions clearName; clearName.clearText = true;
-    coverplayer::platform::InputActions enterName; enterName.textInput = "Podcasts";
-    coverplayer::platform::InputActions saveName; saveName.saveText = true;
     addPlatform.script = {rootBack,manage, chooseAdd, chooseFolder, selectPodcast, chooseType, clearName, enterName, saveName, quit};
     FakeAudio addAudio; FakeProgress addProgress; FakeCache addCache; FakeFileSystem addFileSystem;
     coverplayer::app::Application addApp(addPlatform, &addAudio, &addProgress, addCache, addFileSystem, "unused", "");
@@ -340,11 +408,11 @@ int main() {
         std::cerr << "Named collection creation workflow failed\n";
         return 1;
     }
+    return 0;
+}
 
+int editCollectionType() {
     FakePlatform editPlatform;
-    coverplayer::platform::InputActions selectExisting; selectExisting.navigate = 1;
-    coverplayer::platform::InputActions editExisting; editExisting.accept = true;
-    coverplayer::platform::InputActions selectMusic; selectMusic.navigate = 2;
     editPlatform.script = {rootBack,manage, selectExisting, editExisting, selectMusic, chooseType, saveName, quit};
     FakeAudio editAudio; FakeProgress editProgress; FakeCache editCache; FakeFileSystem editFileSystem;
     coverplayer::app::Application editApp(editPlatform, &editAudio, &editProgress, editCache, editFileSystem, "unused", "");
@@ -354,11 +422,11 @@ int main() {
         std::cerr << "Existing collection type edit created a duplicate or lost the edit\n";
         return 1;
     }
+    return 0;
+}
 
+int reorderAndDeleteCollection() {
     FakePlatform organizePlatform;
-    coverplayer::platform::InputActions moveDown; moveDown.reorder = 1;
-    coverplayer::platform::InputActions requestDelete; requestDelete.deleteItem = true;
-    coverplayer::platform::InputActions confirmDelete; confirmDelete.accept = true;
     organizePlatform.script = {manage, selectExisting, moveDown, requestDelete, confirmDelete, quit};
     FakeAudio organizeAudio; FakeProgress organizeProgress; FakeCache organizeCache; FakeFileSystem organizeFileSystem;
     organizeProgress.configured = {{"Crime", "library/Crime", "audiobook"},
@@ -371,16 +439,15 @@ int main() {
         std::cerr << "Collection reorder/delete workflow failed\n";
         return 1;
     }
+    return 0;
+}
 
+int bluetoothConnectAndPower() {
     FakePlatform bluetoothPlatform;
     bluetoothPlatform.bluetoothAvailable = true;
     bluetoothPlatform.bluetooth = {true, true, false, {
         {"00:11:22:33:44:55", "Headphones", true, false},
         {"AA:BB:CC:DD:EE:FF", "Speaker", false, false}}};
-    coverplayer::platform::InputActions openBluetooth; openBluetooth.openBluetooth = true;
-    coverplayer::platform::InputActions nextDevice; nextDevice.navigate = 1;
-    coverplayer::platform::InputActions connectDevice; connectDevice.accept = true;
-    coverplayer::platform::InputActions powerOff; powerOff.toggleBluetooth = true;
     bluetoothPlatform.script = {openBluetooth, nextDevice, connectDevice, powerOff, rootBack, quit};
     FakeAudio bluetoothAudio; FakeProgress bluetoothProgress; FakeCache bluetoothCache; FakeFileSystem bluetoothFileSystem;
     coverplayer::app::Application bluetoothApp(bluetoothPlatform, &bluetoothAudio, &bluetoothProgress,
@@ -392,7 +459,10 @@ int main() {
         std::cerr << "Bluetooth menu connect or power workflow failed\n";
         return 1;
     }
+    return 0;
+}
 
+int failedBluetoothHandoverStaysPaused() {
     FakePlatform unsafeBluetoothPlatform;
     unsafeBluetoothPlatform.bluetoothAvailable=true;
     unsafeBluetoothPlatform.bluetoothConnectionSucceeds=false;
@@ -405,9 +475,10 @@ int main() {
     if(!unsafeBluetoothAudio.isPaused()){
         std::cerr<<"playback resumed after unsafe Bluetooth volume synchronization failure\n";return 1;
     }
+    return 0;
+}
 
-    coverplayer::platform::InputActions requestBackground; requestBackground.background = true;
-
+int backgroundHandsOffAlbum() {
     // Backgrounding always ends this process (a detached helper takes over
     // playback independently - see docs/architecture.md) - so the loop
     // should stop right at the background action regardless of whether the
@@ -427,7 +498,10 @@ int main() {
         std::cerr << "backgrounding while playing did not hand off the whole album and quit\n";
         return 1;
     }
+    return 0;
+}
 
+int backgroundWithoutAudioQuits() {
     FakePlatform noAudioBackgroundPlatform; noAudioBackgroundPlatform.backgroundSupported = true;
     noAudioBackgroundPlatform.script = {requestBackground, quit};
     FakeAudio noAudioBackgroundAudio; FakeProgress noAudioBackgroundProgress; FakeCache noAudioBackgroundCache; FakeFileSystem noAudioBackgroundFileSystem;
@@ -438,7 +512,10 @@ int main() {
         std::cerr << "backgrounding with nothing open did not fall back to an immediate quit\n";
         return 1;
     }
+    return 0;
+}
 
+int unsupportedBackgroundQuits() {
     FakePlatform unsupportedBackgroundPlatform; unsupportedBackgroundPlatform.backgroundSupported = false;
     unsupportedBackgroundPlatform.script = {rootBack, openCollection, nextCover, openBook, play, requestBackground, quit};
     FakeAudio unsupportedBackgroundAudio; FakeProgress unsupportedBackgroundProgress; FakeCache unsupportedBackgroundCache; FakeFileSystem unsupportedBackgroundFileSystem;
@@ -449,14 +526,16 @@ int main() {
         std::cerr << "backgrounding still quit when the spawn was reported unsupported\n";
         return 1;
     }
+    return 0;
+}
 
+int pausedBackgroundDoesNotResume() {
     // A paused track has nothing to keep playing in the background, and the
     // background helper always starts playing immediately (it cannot
     // represent "open but paused") - so backgrounding it would resume
     // playback as a side effect of a gesture that never pressed play. This
     // should fall back to a plain quit, exactly like the "nothing open" case
     // above, without ever calling the platform.
-    coverplayer::platform::InputActions pauseTrack; pauseTrack.togglePause = true;
     FakePlatform pausedBackgroundPlatform; pausedBackgroundPlatform.backgroundSupported = true;
     pausedBackgroundPlatform.script = {rootBack, openCollection, nextCover, openBook, play, pauseTrack, requestBackground, quit};
     FakeAudio pausedBackgroundAudio; FakeProgress pausedBackgroundProgress; FakeCache pausedBackgroundCache; FakeFileSystem pausedBackgroundFileSystem;
@@ -467,8 +546,10 @@ int main() {
         std::cerr << "backgrounding a paused track resumed playback via the background helper\n";
         return 1;
     }
+    return 0;
+}
 
-    coverplayer::platform::InputActions switchLanguage; switchLanguage.toggleLanguage = true;
+int languagePersistsAcrossRestart() {
     FakePlatform languagePlatform; languagePlatform.script = {switchLanguage, rootBack, quit};
     FakeAudio languageAudio; FakeProgress languageProgress; FakeCache languageCache; FakeFileSystem languageFileSystem;
     coverplayer::app::Application languageApp(languagePlatform, &languageAudio, &languageProgress,
@@ -489,75 +570,223 @@ int main() {
         std::cerr << "saved English language was not restored on restart\n";
         return 1;
     }
+    return 0;
+}
 
-    // Browsing must not change the running track or reopen it on returning.
-    coverplayer::platform::InputActions previousRow; previousRow.navigate = -1;
-    FakePlatform browsePlatform; FakeAudio browseAudio; FakeProgress browseProgress;
-    browsePlatform.script = {nextCover, openBook, previousRow, play, rootBack, nextCover, previousRow, play, rootBack, nextCover, play, rootBack, rootBack, quit};
-    browsePlatform.beforePoll = [&](std::size_t frame) { if (frame == 4) browseAudio.seekSeconds(17); };
-    coverplayer::app::Application browseApp(browsePlatform, &browseAudio, &browseProgress, cache, fileSystem, "unused", "");
-    browseApp.run();
-    if (browseAudio.opens != std::vector<std::string>{"two-1.mp3", "two-2.mp3"} ||
-        browsePlatform.pausedStates[4] || browsePlatform.pausedStates[7] ||
-        !browsePlatform.pausedStates[12] || browseAudio.opened != "two-2.mp3") {
-        std::cerr << "album navigation interrupted or restarted playback\n"; return 1;
+// Every scenario owns its adapters and library, including rescan storage.
+template<class Cache = FakeCache, class Progress = FakeProgress>
+struct Fixture {
+    FakePlatform platform;
+    FakeAudio audio;
+    Progress progress;
+    Cache cache;
+    FakeFileSystem fileSystem;
+
+    void run() {
+        coverplayer::app::Application app(platform, &audio, &progress, cache, fileSystem, "unused", "");
+        app.run();
     }
-    bool sawTrackCover = false, sawAlbumFallback = false, savedFirstPosition = false;
-    for (const auto& view : browsePlatform.views) if (view.screen == coverplayer::platform::Screen::Player) {
+
+    void playFirstTrack() {
+        platform.append(nextCover);
+        platform.append(openBook);
+        platform.append(previousRow);
+        platform.append(play);
+    }
+
+    bool savedPosition(const std::string& mediaId, double seconds) const {
+        for (const auto& entry : progress.saved)
+            if (entry.first == mediaId && entry.second.positionSeconds == seconds) return true;
+        return false;
+    }
+};
+
+int browseWithoutRestartAndSaveOutgoingProgress() {
+    Fixture<> f;
+    f.playFirstTrack();
+    const auto returnedToTracks = f.platform.append(rootBack, [&] { f.audio.seekSeconds(17); });
+    f.platform.append(nextCover);
+    f.platform.append(previousRow);
+    const auto reopenedPlaying = f.platform.append(play);
+    f.platform.append(rootBack);
+    f.platform.append(nextCover);
+    f.platform.append(play);
+    f.platform.append(rootBack);
+    const auto leftTracks = f.platform.append(rootBack);
+    f.platform.append(quit);
+    f.run();
+    if (f.audio.opens != std::vector<std::string>{"two-1.mp3", "two-2.mp3"} ||
+        f.platform.pausedAfter(returnedToTracks) || f.platform.pausedAfter(reopenedPlaying) ||
+        !f.platform.pausedAfter(leftTracks)) {
+        std::cerr << "album navigation interrupted or restarted playback\n";
+        return 1;
+    }
+    bool sawTrackCover = false, sawAlbumFallback = false;
+    for (const auto& view : f.platform.views) if (view.screen == coverplayer::platform::Screen::Player) {
         sawTrackCover |= view.coverPath == "track-one.jpg";
         sawAlbumFallback |= view.coverPath == "two.jpg";
     }
-    for (const auto& entry : browseProgress.saved)
-        savedFirstPosition |= entry.first == "two-1.mp3" && entry.second.positionSeconds == 17;
-    if (!sawTrackCover || !sawAlbumFallback || !savedFirstPosition) {
-        std::cerr << "title cover fallback or outgoing progress failed\n"; return 1;
+    if (!sawTrackCover || !sawAlbumFallback || !f.savedPosition("two-1.mp3", 17)) {
+        std::cerr << "title cover fallback or outgoing progress failed\n";
+        return 1;
     }
+    return 0;
+}
 
-    // End-of-track follows the playing identity, even with a different row selected.
-    FakePlatform advancePlatform; FakeAudio advanceAudio; FakeProgress advanceProgress;
-    advancePlatform.script = {nextCover, openBook, previousRow, play, rootBack, nextCover, {}, play, quit};
-    advancePlatform.beforePoll = [&](std::size_t frame) { if (frame == 6) advanceAudio.finished = true; };
-    coverplayer::app::Application advanceApp(advancePlatform, &advanceAudio, &advanceProgress, cache, fileSystem, "unused", "");
-    advanceApp.run();
-    if (advanceAudio.opens != std::vector<std::string>{"two-1.mp3", "two-2.mp3"} ||
-        advancePlatform.views.back().screen != coverplayer::platform::Screen::Player) {
-        std::cerr << "automatic advance in title list skipped or reopened a track\n"; return 1;
+int automaticAdvanceDoesNotReopen() {
+    Fixture<> f;
+    f.playFirstTrack();
+    f.platform.append(rootBack);
+    f.platform.append(nextCover);
+    f.platform.append({}, [&] { f.audio.finished = true; });
+    f.platform.append(play);
+    f.platform.append(quit);
+    f.run();
+    if (f.audio.opens != std::vector<std::string>{"two-1.mp3", "two-2.mp3"} ||
+        f.platform.views.back().screen != coverplayer::platform::Screen::Player) {
+        std::cerr << "automatic advance in title list skipped or reopened a track\n";
+        return 1;
     }
+    return 0;
+}
 
-    // Automatic advance must preserve a deliberately different browsing selection.
-    FakePlatform selectionPlatform; FakeAudio selectionAudio; FakeProgress selectionProgress;
-    selectionPlatform.script = {nextCover, openBook, previousRow, play, rootBack, nextCover, {}, quit};
-    selectionPlatform.beforePoll = [&](std::size_t frame) { if (frame == 6) selectionAudio.finished = true; };
-    coverplayer::app::Application selectionApp(selectionPlatform, &selectionAudio, &selectionProgress, cache, fileSystem, "unused", "");
-    selectionApp.run();
-    if (selectionPlatform.views.back().screen != coverplayer::platform::Screen::Tracks ||
-        selectionPlatform.views.back().selected != 1 || selectionAudio.opened != "two-2.mp3") {
-        std::cerr << "automatic advance changed browsing context\n"; return 1;
+class ThreeTrackCache final : public coverplayer::library::LibraryCache {
+public:
+    std::optional<std::vector<coverplayer::library::Collection>> load(const std::string& root, std::uint64_t fingerprint) override {
+        FakeCache cache;
+        auto albums = cache.load(root, fingerprint);
+        albums->back().tracks.push_back({"Chapter 3", "two-3.mp3", "", "", 3});
+        return albums;
     }
+    bool save(const std::string&, std::uint64_t, const std::vector<coverplayer::library::Collection>&) override { return true; }
+    void invalidate(const std::string&) override {}
+};
 
-    // The last track ends in the list without wrapping or reopening the selection.
-    FakePlatform endPlatform; FakeAudio endAudio; FakeProgress endProgress;
-    endPlatform.script = {nextCover, openBook, play, rootBack, previousRow, {}, {}, {}, quit};
-    endPlatform.beforePoll = [&](std::size_t frame) { if (frame == 5) endAudio.finished = true; };
-    coverplayer::app::Application endApp(endPlatform, &endAudio, &endProgress, cache, fileSystem, "unused", "");
-    endApp.run();
-    if (endAudio.opens != std::vector<std::string>{"two-2.mp3"} ||
-        endPlatform.views.back().screen != coverplayer::platform::Screen::Tracks ||
-        endPlatform.views.back().selected != 0 || endProgress.saved.size() > 5) {
-        std::cerr << "end of album wrapped or changed selection\n"; return 1;
+int automaticAdvancePreservesDifferentSelection() {
+    Fixture<ThreeTrackCache> f;
+    f.playFirstTrack();
+    f.platform.append(rootBack);
+    f.platform.append(nextCover);
+    f.platform.append(nextCover);
+    const auto advanced = f.platform.append({}, [&] { f.audio.finished = true; });
+    f.platform.append(quit);
+    f.run();
+    const auto& view = f.platform.viewAfter(advanced);
+    if (view.screen != coverplayer::platform::Screen::Tracks || view.selected != 2 ||
+        f.audio.opens != std::vector<std::string>{"two-1.mp3", "two-2.mp3"}) {
+        std::cerr << "track 1 must advance to track 2 while track 3 remains selected\n";
+        return 1;
     }
+    return 0;
+}
 
-    // Opening another row saves the outgoing track under its own media ID.
-    FakePlatform skipPlatform; FakeAudio skipAudio; FakeProgress skipProgress;
-    skipPlatform.script = {nextCover, openBook, previousRow, play, rootBack, nextCover, play, quit};
-    skipPlatform.beforePoll = [&](std::size_t frame) { if (frame == 4) skipAudio.seekSeconds(29); };
-    coverplayer::app::Application skipApp(skipPlatform, &skipAudio, &skipProgress, cache, fileSystem, "unused", "");
-    skipApp.run();
-    bool savedOutgoing = false;
-    for (const auto& entry : skipProgress.saved)
-        savedOutgoing |= entry.first == "two-1.mp3" && entry.second.positionSeconds == 29;
-    if (!savedOutgoing || skipAudio.opened != "two-2.mp3" || skipAudio.positionSeconds() != 42) {
-        std::cerr << "manual title switch lost progress or resume position\n"; return 1;
+int albumEndDoesNotWrapOrSaveEveryFrame() {
+    Fixture<> f;
+    f.platform.append(nextCover);
+    f.platform.append(openBook);
+    f.platform.append(play);
+    f.platform.append(rootBack);
+    f.platform.append(previousRow);
+    f.platform.append({}, [&] { f.audio.finished = true; });
+    std::size_t savesAfterEnd = 0, savesAfterIdle = 0;
+    f.platform.append({}, [&] { savesAfterEnd = f.progress.saved.size(); });
+    f.platform.append({});
+    f.platform.append(quit, [&] { savesAfterIdle = f.progress.saved.size(); });
+    f.run();
+    if (f.audio.opens != std::vector<std::string>{"two-2.mp3"} ||
+        f.platform.views.back().screen != coverplayer::platform::Screen::Tracks ||
+        f.platform.views.back().selected != 0 || savesAfterEnd != savesAfterIdle) {
+        std::cerr << "end of album wrapped, changed selection or saved each idle frame\n";
+        return 1;
     }
+    return 0;
+}
+
+int manualSwitchSavesCorrectMediaId() {
+    Fixture<> f;
+    f.playFirstTrack();
+    f.platform.append(rootBack, [&] { f.audio.seekSeconds(29); });
+    f.platform.append(nextCover);
+    f.platform.append(play);
+    f.platform.append(quit);
+    f.run();
+    if (!f.savedPosition("two-1.mp3", 29) || f.audio.opened != "two-2.mp3" || f.audio.positionSeconds() != 42) {
+        std::cerr << "manual title switch lost progress or resume position\n";
+        return 1;
+    }
+    return 0;
+}
+
+int pauseSuspendResumeAndSleepTimer() {
+    Fixture<> f;
+    f.playFirstTrack();
+    const auto suspended = f.platform.append(input(&InputActions::suspend, true));
+    const auto resumed = f.platform.append(input(&InputActions::resume, true));
+    const auto paused = f.platform.append(pauseTrack);
+    const auto pausedSuspend = f.platform.append(input(&InputActions::suspend, true));
+    const auto pausedResume = f.platform.append(input(&InputActions::resume, true));
+    const auto continued = f.platform.append(pauseTrack);
+    for (int i = 0; i < 4; ++i) f.platform.append(input(&InputActions::cycleSleepTimer, true));
+    f.platform.append(quit);
+    f.run();
+    if (!f.platform.pausedAfter(suspended) || f.platform.pausedAfter(resumed) ||
+        !f.platform.pausedAfter(paused) || !f.platform.pausedAfter(pausedSuspend) ||
+        !f.platform.pausedAfter(pausedResume) || f.platform.pausedAfter(continued) ||
+        f.audio.opens.size() != 1 || f.platform.sleepTimers != std::vector<int>{15,15,30,30,60,60,0}) {
+        std::cerr << "pause, suspend/resume or sleep timer cycling changed\n";
+        return 1;
+    }
+    return 0;
+}
+
+int transportBoundariesAndSeek() {
+    Fixture<> f;
+    f.playFirstTrack();
+    f.platform.append(input(&InputActions::changeTrack, -1));
+    f.platform.append(input(&InputActions::seekSeconds, 10.0));
+    f.platform.append(input(&InputActions::seekSeconds, -10.0));
+    f.platform.append(input(&InputActions::seekSeconds, 30.0));
+    f.platform.append(input(&InputActions::changeTrack, 1));
+    f.platform.append(input(&InputActions::changeTrack, 1));
+    f.platform.append(input(&InputActions::seekSeconds, -30.0));
+    f.platform.append(quit);
+    f.run();
+    if (f.audio.opens != std::vector<std::string>{"two-1.mp3", "two-2.mp3"} ||
+        !f.savedPosition("two-1.mp3", 30) || f.audio.positionSeconds() != 12) {
+        std::cerr << "previous/next boundaries or seeking changed\n";
+        return 1;
+    }
+    return 0;
+}
+
+} // namespace
+
+int main() {
+    if (pauseSuspendResumeAndSleepTimer() != 0) return 1;
+    if (transportBoundariesAndSeek() != 0) return 1;
+    if (coverFlowResumeAndCollectionCover() != 0) { std::cerr << "Scenario: coverFlowResumeAndCollectionCover\n"; return 1; }
+    if (singleTrackResumeAndBack() != 0) { std::cerr << "Scenario: singleTrackResumeAndBack\n"; return 1; }
+    if (rescanAllCollections() != 0) { std::cerr << "Scenario: rescanAllCollections\n"; return 1; }
+    if (singleCollectionSkipsPicker() != 0) { std::cerr << "Scenario: singleCollectionSkipsPicker\n"; return 1; }
+    if (coverFlowStopsAtFirstItem() != 0) { std::cerr << "Scenario: coverFlowStopsAtFirstItem\n"; return 1; }
+    if (listTogglePreservesSelection() != 0) { std::cerr << "Scenario: listTogglePreservesSelection\n"; return 1; }
+    if (nestedAlbumNavigation() != 0) { std::cerr << "Scenario: nestedAlbumNavigation\n"; return 1; }
+    if (rootCoverOverridesFallback() != 0) { std::cerr << "Scenario: rootCoverOverridesFallback\n"; return 1; }
+    if (missingCollectionRemainsVisible() != 0) { std::cerr << "Scenario: missingCollectionRemainsVisible\n"; return 1; }
+    if (addNamedCollection() != 0) { std::cerr << "Scenario: addNamedCollection\n"; return 1; }
+    if (editCollectionType() != 0) { std::cerr << "Scenario: editCollectionType\n"; return 1; }
+    if (reorderAndDeleteCollection() != 0) { std::cerr << "Scenario: reorderAndDeleteCollection\n"; return 1; }
+    if (bluetoothConnectAndPower() != 0) { std::cerr << "Scenario: bluetoothConnectAndPower\n"; return 1; }
+    if (failedBluetoothHandoverStaysPaused() != 0) { std::cerr << "Scenario: failedBluetoothHandoverStaysPaused\n"; return 1; }
+    if (backgroundHandsOffAlbum() != 0) { std::cerr << "Scenario: backgroundHandsOffAlbum\n"; return 1; }
+    if (backgroundWithoutAudioQuits() != 0) { std::cerr << "Scenario: backgroundWithoutAudioQuits\n"; return 1; }
+    if (unsupportedBackgroundQuits() != 0) { std::cerr << "Scenario: unsupportedBackgroundQuits\n"; return 1; }
+    if (pausedBackgroundDoesNotResume() != 0) { std::cerr << "Scenario: pausedBackgroundDoesNotResume\n"; return 1; }
+    if (languagePersistsAcrossRestart() != 0) { std::cerr << "Scenario: languagePersistsAcrossRestart\n"; return 1; }
+    if (browseWithoutRestartAndSaveOutgoingProgress() != 0) { std::cerr << "Scenario: browseWithoutRestartAndSaveOutgoingProgress\n"; return 1; }
+    if (automaticAdvanceDoesNotReopen() != 0) { std::cerr << "Scenario: automaticAdvanceDoesNotReopen\n"; return 1; }
+    if (automaticAdvancePreservesDifferentSelection() != 0) { std::cerr << "Scenario: automaticAdvancePreservesDifferentSelection\n"; return 1; }
+    if (albumEndDoesNotWrapOrSaveEveryFrame() != 0) { std::cerr << "Scenario: albumEndDoesNotWrapOrSaveEveryFrame\n"; return 1; }
+    if (manualSwitchSavesCorrectMediaId() != 0) { std::cerr << "Scenario: manualSwitchSavesCorrectMediaId\n"; return 1; }
     return 0;
 }
