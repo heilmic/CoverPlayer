@@ -29,6 +29,8 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Package verifier tests failed.' }
     & $pythonCommand.Source "$repositoryRoot/tests/doc_links_test.py"
     if ($LASTEXITCODE -ne 0) { throw 'Documentation checker tests failed.' }
+    & $pythonCommand.Source "$repositoryRoot/tests/switch_package_test.py"
+    if ($LASTEXITCODE -ne 0) { throw 'Switch package metadata tests failed.' }
     & $pythonCommand.Source "$repositoryRoot/scripts/check-doc-links.py"
     if ($LASTEXITCODE -ne 0) { throw 'Documentation link checks failed.' }
 

@@ -58,7 +58,8 @@ int main(int argc, char** argv) {
 
     SDL_SetHint(SDL_HINT_RENDER_DRIVER, "software");
     SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "linear");
-    SDL_setenv("COVERPLAYER_UI_WIDTH", "640", 1);
+    if (SDL_getenv("COVERPLAYER_UI_WIDTH") == nullptr)
+        SDL_setenv("COVERPLAYER_UI_WIDTH", "640", 1);
     SDL_setenv("SDL_VIDEODRIVER", "dummy", 1);
     coverplayer::platform::SdlRenderer renderer;
     const bool english = argc >= 4 && std::string(argv[3]) == "en";

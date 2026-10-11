@@ -2,7 +2,7 @@
 
 [English gallery](generated/en/README.md) · [German gallery](generated/README.md)
 
-All images come from the native SDL renderer at 640 × 480. The README GIF uses
+The published galleries come from the native SDL renderer at 640 × 480. The README GIF uses
 music covers. Audiobook examples use Sherlock Holmes BBC productions; progress
 and chapter data are fictional. No media library is bundled.
 
@@ -25,3 +25,25 @@ Review the result after renderer changes. The GIF encoder checks size, duration
 and loop settings. Artwork is area-filtered and linearly sampled, but small
 lettering remains limited by the handheld's native resolution. Original artwork
 is excluded from Git and packages; displayed cover art belongs to its rights holders.
+
+## Layout previews
+
+For direct previews, run `coverplayer_screenshot_tool <output-dir> <source-cover-dir> en`
+from the repository root after the desktop build. This includes the collection
+manager; the gallery script selects only the 14 published screenshots.
+Set `COVERPLAYER_UI_WIDTH=720` to review the wider handheld layout; the tool
+defaults to 640 when the variable is unset. Output paths should stay under `build/`.
+
+Build the separate Switch preview with tests disabled:
+
+```sh
+cmake -S . -B build/switch-preview -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCOVERPLAYER_BUILD_SWITCH_PREVIEW=ON -DCOVERPLAYER_BUILD_TESTS=OFF
+cmake --build build/switch-preview --target coverplayer_switch_preview
+build/switch-preview/coverplayer_switch_preview build/screenshots/switch-preview docs/screenshots/source-covers en
+```
+
+On Windows the executables have an `.exe` suffix and require the MSYS2 UCRT64
+runtime on PATH. The Switch preview always renders 1280 × 720 and also includes
+name/folder editors and a long collection list. Check CoverFlow, tracks, player,
+collection management and help in both languages. These software-rendered
+previews verify layout, not device performance or hardware lifecycle behavior.

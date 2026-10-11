@@ -59,7 +59,8 @@ $renderProcess = Start-Process -FilePath $tool -ArgumentList $renderArgs `
 if ($renderProcess.ExitCode -ne 0) { throw "Demo rendering failed with exit code $($renderProcess.ExitCode)." }
 
 Add-Type -AssemblyName System.Drawing
-$screenshots = Get-ChildItem -LiteralPath $rawDirectory -Filter '*.bmp' -File | Sort-Object Name
+$screenshots = Get-ChildItem -LiteralPath $rawDirectory -Filter '*.bmp' -File |
+    Where-Object { $_.BaseName -match '^(0[1-9]|1[0-4])-' } | Sort-Object Name
 if ($screenshots.Count -ne 14) { throw "Expected 14 rendered screenshots; found $($screenshots.Count)." }
 foreach ($screenshot in $screenshots) {
     $destination = Join-Path $OutputDirectory ($screenshot.BaseName + '.png')
