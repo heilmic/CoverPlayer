@@ -51,6 +51,31 @@ int main() {
     }
 
     {
+        struct PlayerButton {
+            Uint8 button;
+            double seekSeconds;
+            int changeTrack;
+        };
+        const PlayerButton buttons[] = {
+            {SDL_CONTROLLER_BUTTON_DPAD_LEFT, -10, 0},
+            {SDL_CONTROLLER_BUTTON_DPAD_RIGHT, 10, 0},
+            {SDL_CONTROLLER_BUTTON_DPAD_UP, 0, -1},
+            {SDL_CONTROLLER_BUTTON_DPAD_DOWN, 0, 1},
+            {SDL_CONTROLLER_BUTTON_LEFTSHOULDER, -30, 0},
+            {SDL_CONTROLLER_BUTTON_RIGHTSHOULDER, 30, 0},
+        };
+        coverplayer::platform::SdlInput input;
+        for (const auto& button : buttons) {
+            require(pushButton(button.button), "could not queue player button");
+            const auto actions = input.poll(coverplayer::platform::Screen::Player, false);
+            require(actions.seekSeconds == button.seekSeconds && actions.changeTrack == button.changeTrack,
+                "player D-pad/shoulder seek or track mapping changed");
+            releaseButton(button.button);
+            static_cast<void>(input.poll(coverplayer::platform::Screen::Player, false));
+        }
+    }
+
+    {
         coverplayer::platform::SdlInput input;
         if (!pushStartEvent(SDL_CONTROLLERBUTTONDOWN)) return 1;
         const auto pressed = input.poll(coverplayer::platform::Screen::Player, false);
