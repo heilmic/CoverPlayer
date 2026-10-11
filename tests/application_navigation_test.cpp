@@ -759,9 +759,26 @@ int transportBoundariesAndSeek() {
     return 0;
 }
 
+int backgroundUsesPlayingIdentityWhileBrowsing() {
+    Fixture<> f;
+    f.platform.backgroundSupported = true;
+    f.playFirstTrack();
+    f.platform.append(rootBack);
+    f.platform.append(nextCover);
+    f.platform.append(requestBackground);
+    f.run();
+    if (f.platform.lastBackgroundTrackPaths != std::vector<std::string>{"two-1.mp3", "two-2.mp3"} ||
+        f.platform.lastBackgroundStartIndex != 0) {
+        std::cerr << "background handoff followed the browsing selection instead of playback\n";
+        return 1;
+    }
+    return 0;
+}
+
 } // namespace
 
 int main() {
+    if (backgroundUsesPlayingIdentityWhileBrowsing() != 0) return 1;
     if (pauseSuspendResumeAndSleepTimer() != 0) return 1;
     if (transportBoundariesAndSeek() != 0) return 1;
     if (coverFlowResumeAndCollectionCover() != 0) { std::cerr << "Scenario: coverFlowResumeAndCollectionCover\n"; return 1; }

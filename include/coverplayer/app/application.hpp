@@ -132,12 +132,14 @@ private:
     void restoreLastSelection();
     void selectResumeTrack();
     void openSelectedTrack();
+    void openTrack(const library::Collection& album, std::size_t index);
+    [[nodiscard]] std::optional<std::size_t> playingTrackIndex(const library::Collection& album) const;
 
     std::vector<LibrarySource> sources_;
     std::vector<persistence::MediaCollection> collections_;
     std::size_t sourceIndex_ = 0;
     std::size_t albumIndex_ = 0;
-    std::size_t trackIndex_ = 0;
+    std::size_t trackIndex_ = 0; // Browsing selection; currentMediaId_ identifies playback.
     std::vector<std::size_t> navigationPath_;
     platform::Screen screen_ = platform::Screen::Collections;
     std::chrono::steady_clock::time_point sleepDeadline_{};

@@ -191,11 +191,12 @@ void Application::handleBackgroundRequest() {
     // Falls back to a single-track handoff if the current track cannot be
     // matched back into an album's track list.
     const auto* album = selectedAlbum();
-    if (album != nullptr && trackIndex_ < album->tracks.size() && album->tracks[trackIndex_].path == currentMediaId_) {
+    const auto playingIndex = album != nullptr ? playingTrackIndex(*album) : std::nullopt;
+    if (playingIndex) {
         std::vector<std::string> trackPaths;
         trackPaths.reserve(album->tracks.size());
         for (const auto& track : album->tracks) trackPaths.push_back(track.path);
-        platform_.enterBackgroundPlayback(trackPaths, trackIndex_);
+        platform_.enterBackgroundPlayback(trackPaths, *playingIndex);
     } else {
         platform_.enterBackgroundPlayback({currentMediaId_}, 0);
     }
@@ -400,30 +401,42 @@ void Application::handleCollectionNameBack(const platform::InputActions& actions
 
 void Application::updatePlayback(const platform::InputActions& actions) {
     if (audioPlayer_ == nullptr) return;
-    if (!actions.openMediaPath.empty()) { saveProgress(); openMedia(actions.openMediaPath); screen_ = platform::Screen::Player; }
-    if (actions.togglePause && screen_ == platform::Screen::Player) { audioPlayer_->togglePause(); saveProgress(); }
-    if (actions.seekSeconds != 0.0 && screen_ == platform::Screen::Player) { audioPlayer_->seekSeconds(actions.seekSeconds); saveProgress(); }
+    if (!actions.openMediaPath.empty()) {
+        saveProgress();
+        openMedia(actions.openMediaPath);
+        screen_ = platform::Screen::Player;
+    }
+    if (actions.togglePause && screen_ == platform::Screen::Player) {
+        audioPlayer_->togglePause();
+        saveProgress();
+    }
+    if (actions.seekSeconds != 0.0 && screen_ == platform::Screen::Player) {
+        audioPlayer_->seekSeconds(actions.seekSeconds);
+        saveProgress();
+    }
     audioPlayer_->update();
     if (!audioPlayer_->isFinished()) trackEndHandled_ = false;
     if (sleepMinutes_ > 0 && std::chrono::steady_clock::now() >= sleepDeadline_) {
         if (audioPlayer_->isOpen() && !audioPlayer_->isPaused()) audioPlayer_->togglePause();
-        saveProgress(); sleepMinutes_ = 0; platform_.setSleepTimer(0);
+        saveProgress();
+        sleepMinutes_ = 0;
+        platform_.setSleepTimer(0);
     }
     const auto* album = selectedAlbum();
     if (audioPlayer_->isFinished() && !trackEndHandled_ && (screen_ == platform::Screen::Player || screen_ == platform::Screen::Tracks) && album != nullptr) {
-        const auto playing = std::find_if(album->tracks.begin(), album->tracks.end(),
-            [&](const auto& track) { return track.path == currentMediaId_; });
-        if (playing != album->tracks.end()) {
+        const auto playingIndex = playingTrackIndex(*album);
+        if (playingIndex) {
             trackEndHandled_ = true;
-            saveProgress();
-            const auto playingIndex = static_cast<std::size_t>(playing - album->tracks.begin());
-            if (playingIndex + 1 < album->tracks.size()) {
-                const auto selection = trackIndex_;
-                trackIndex_ = playingIndex + 1;
-                openSelectedTrack();
-                if (screen_ == platform::Screen::Tracks && selection != playingIndex) trackIndex_ = selection;
-            } else if (screen_ == platform::Screen::Player) {
-                screen_ = album->tracks.size() == 1 ? albumBrowserScreen_ : platform::Screen::Tracks;
+            if (*playingIndex + 1 < album->tracks.size()) {
+                const auto nextIndex = *playingIndex + 1;
+                // Follow playback unless the user deliberately selected another row.
+                if (screen_ == platform::Screen::Player || trackIndex_ == *playingIndex)
+                    trackIndex_ = nextIndex;
+                openTrack(*album, nextIndex);
+            } else {
+                saveProgress();
+                if (screen_ == platform::Screen::Player)
+                    screen_ = album->tracks.size() == 1 ? albumBrowserScreen_ : platform::Screen::Tracks;
             }
         }
     }
@@ -517,19 +530,50 @@ const library::Collection* Application::selectedAlbum() const {
 std::vector<library::Collection>* Application::currentNodes(){if(sources_.empty()||sourceIndex_>=sources_.size())return nullptr;auto* nodes=&sources_[sourceIndex_].albums;for(const auto index:navigationPath_){if(index>=nodes->size())return nullptr;nodes=&(*nodes)[index].children;}return nodes;}
 const std::vector<library::Collection>* Application::currentNodes()const{if(sources_.empty()||sourceIndex_>=sources_.size())return nullptr;const auto* nodes=&sources_[sourceIndex_].albums;for(const auto index:navigationPath_){if(index>=nodes->size())return nullptr;nodes=&(*nodes)[index].children;}return nodes;}
 std::string Application::currentContainerName()const{if(sources_.empty()||sourceIndex_>=sources_.size())return t("SAMMLUNG");const auto* nodes=&sources_[sourceIndex_].albums;const library::Collection* container=nullptr;for(const auto index:navigationPath_){if(index>=nodes->size())break;container=&(*nodes)[index];nodes=&container->children;}return container==nullptr?sources_[sourceIndex_].name:container->name;}
-void Application::openSelectedNode(){auto* node=selectedAlbum();if(node==nullptr)return;if(!node->children.empty()){navigationPath_.push_back(albumIndex_);albumIndex_=0;trackIndex_=0;return;}if(node->tracks.empty())return;selectResumeTrack();if(node->tracks.size()==1){openSelectedTrack();screen_=platform::Screen::Player;}else screen_=platform::Screen::Tracks;}
+void Application::openSelectedNode() {
+    const auto* node = selectedAlbum();
+    if (node == nullptr) return;
+    if (!node->children.empty()) {
+        navigationPath_.push_back(albumIndex_);
+        albumIndex_ = 0;
+        trackIndex_ = 0;
+        return;
+    }
+    if (node->tracks.empty()) return;
+    selectResumeTrack();
+    if (node->tracks.size() == 1) {
+        openSelectedTrack();
+        screen_ = platform::Screen::Player;
+    } else {
+        screen_ = platform::Screen::Tracks;
+    }
+}
+
 void Application::openSelectedTrack() {
-    auto* album = selectedAlbum();
+    const auto* album = selectedAlbum();
     if (album == nullptr || album->tracks.empty()) return;
     trackIndex_ = std::min(trackIndex_, album->tracks.size() - 1);
+    openTrack(*album, trackIndex_);
+}
+
+std::optional<std::size_t> Application::playingTrackIndex(const library::Collection& album) const {
+    const auto playing = std::find_if(album.tracks.begin(), album.tracks.end(),
+        [&](const auto& track) { return track.path == currentMediaId_; });
+    if (playing == album.tracks.end()) return std::nullopt;
+    return static_cast<std::size_t>(playing - album.tracks.begin());
+}
+
+void Application::openTrack(const library::Collection& album, std::size_t index) {
+    if (index >= album.tracks.size()) return;
+    const auto& track = album.tracks[index];
     saveProgress();
-    currentTrackName_ = trackTitle(trackIndex_, album->tracks.size(), album->tracks[trackIndex_].name);
+    currentTrackName_ = trackTitle(index, album.tracks.size(), track.name);
     if (audioPlayer_ != nullptr && audioPlayer_->isOpen() && !audioPlayer_->isFinished() &&
-        currentMediaId_ == album->tracks[trackIndex_].path) {
+        currentMediaId_ == track.path) {
         if (audioPlayer_->isPaused()) audioPlayer_->togglePause();
         return;
     }
-    openMedia(album->tracks[trackIndex_].path);
+    openMedia(track.path);
 }
 
 void Application::moveSelection(int delta) {
@@ -608,20 +652,26 @@ void Application::publishTracks() {
 void Application::publishPlayer() {
     platform::ViewModel view; view.screen = screen_;
     const auto* album = selectedAlbum();
-    if (album != nullptr && !album->tracks.empty()) {
-        view.title = album->tracks[trackIndex_].name;
-        view.subtitle = album->name + (album->artist.empty()?"":"  -  "+album->artist) + "  |  " + (language_==Language::English?"TRACK":t("TITEL")) + " " + std::to_string(trackIndex_ + 1) + "/" + std::to_string(album->tracks.size());
-        view.coverPath = album->tracks[trackIndex_].coverPath.empty() ? album->coverPath : album->tracks[trackIndex_].coverPath;
+    const auto index = album != nullptr ? playingTrackIndex(*album) : std::nullopt;
+    if (index) {
+        const auto& track = album->tracks[*index];
+        view.title = track.name;
+        view.subtitle = album->name + (album->artist.empty() ? "" : "  -  " + album->artist) +
+            "  |  " + (language_ == Language::English ? "TRACK" : t("TITEL")) + " " +
+            std::to_string(*index + 1) + "/" + std::to_string(album->tracks.size());
+        view.coverPath = track.coverPath.empty() ? album->coverPath : track.coverPath;
     } else view.title = currentTrackName_.empty() ? t("WIEDERGABE") : currentTrackName_;
     view.message = lastError_;
     platform_.setView(std::move(view));
 }
 
 void Application::changeTrack(int delta) {
-    auto* album = selectedAlbum(); if (album == nullptr || album->tracks.empty()) return;
-    const auto target = static_cast<long long>(trackIndex_) + delta;
+    const auto* album = selectedAlbum();
+    if (album == nullptr || album->tracks.empty()) return;
+    const auto target = static_cast<long long>(playingTrackIndex(*album).value_or(trackIndex_)) + delta;
     if (target < 0 || target >= static_cast<long long>(album->tracks.size())) return;
-    saveProgress(); trackIndex_ = static_cast<std::size_t>(target); openSelectedTrack();
+    trackIndex_ = static_cast<std::size_t>(target);
+    openTrack(*album, trackIndex_);
 }
 void Application::cycleSleepTimer() {
     sleepMinutes_ = sleepMinutes_ == 0 ? 15 : sleepMinutes_ == 15 ? 30 : sleepMinutes_ == 30 ? 60 : 0;
