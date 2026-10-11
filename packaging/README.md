@@ -12,15 +12,12 @@ not included. [Project and downloads](https://github.com/heilmic/CoverPlayer).
 | Knulli Test | `CoverPlayer-Knulli-Test.zip` | Extract the same way; installs beside the regular app. |
 | muOS | `CoverPlayer.muxapp` | Use the muOS application installer. |
 
-On Knulli, both `roms/ports/CoverPlayer.sh` and `roms/ports/CoverPlayer/` must
-exist (or their Test equivalents). Saved collections, bookmarks, progress and
-cache live outside the installation folder. Keep them and your media when updating.
+- Knulli needs both `roms/ports/CoverPlayer.sh` and `roms/ports/CoverPlayer/` (or Test equivalents).
+- Updates: retain media and saved data; collections, bookmarks, progress and cache live outside the app folder.
 
 ## Controls
 
-The left analog stick works like the D-pad. Hold either (or keyboard arrows)
-to scroll: repeat begins after 330 ms and accelerates after 1.2 seconds. Release
-or center the stick to stop. Player seek/track actions stay single-step.
+D-pad / left stick: navigate; hold to scroll faster. Seeking and track changes stay single-step.
 
 | Button | Action |
 | --- | --- |
@@ -36,20 +33,15 @@ or center the stick to stop. Player seek/track actions stay single-step.
 | Start, hold 2 seconds | Leave with background playback on Knulli/muOS |
 | Start + Select | Exit without background playback |
 
-Reopen CoverPlayer to take background playback back into the interface. Knulli
-lowers other server-visible audio streams to half their original amplitude
-(about -6 dB). muOS game volume may need manual adjustment.
+- Reopen CoverPlayer to return from background playback.
+- Knulli lowers other server-visible audio by about 6 dB; muOS may need manual game-volume adjustment.
 
 ## Screen and Bluetooth
 
-During playback, supported firmware adapters protect audio from automatic
-idle mute/suspend. The foreground display dims fully after 60 seconds; the
-first press wakes it. Pause, playback end and Sleep Timer expiry release the
-protection. Background playback never dims another app. Firmware settings stay
-unchanged. The newer muOS power adapter still needs hardware validation.
-
-Pair headphones in Knulli's system menu first; CoverPlayer manages already
-paired devices. Bluetooth management is unavailable on muOS.
+- Foreground dims after 60 seconds; first press wakes it. Background playback never dims other apps.
+- Supported firmware: playback prevents idle mute/suspend; pause, playback end or sleep-timer expiry restores normal behavior. Firmware settings remain unchanged.
+- Newer muOS power adapter: hardware validation pending.
+- Bluetooth: pair in Knulli's system menu first; manage paired devices in CoverPlayer. No muOS Bluetooth management.
 
 ## Troubleshooting
 
@@ -61,20 +53,16 @@ paired devices. Bluetooth management is unavailable on muOS.
 - Intermittent Bluetooth audio stutter is under investigation; a clean audio
   log does not rule it out.
 
-See the repository's `docs/README.md` for architecture, compatibility and
-recovery limitations. License: `LICENSE`; dependencies: `THIRD_PARTY_NOTICES.md`.
-
 ## Album playback and artwork
 
-B from the player returns to the album track list without pausing. Browsing the
-list leaves the running track unchanged; A selects another track or returns to
-the current track without restarting it. B again leaves the album, pauses and
-saves progress. A one-track album returns directly to the album browser and pauses.
-Up/Down in the player selects the previous/next track, without wrapping.
+- **B** from player: return to track list, keep listening. **B** again: leave album, pause and save.
+- One-track album: return directly to browser and pause.
+- **A** in list: play selected track; selecting the current track returns to the player without restarting it.
+- **Up/Down** in player: previous/next track, without wrapping.
+- Player cover: embedded artwork → folder cover → placeholder. Album browser prefers folder artwork.
+- Collection manager: **X** removes, **A** confirms, **B** cancels. Media stays; last collection cannot be removed.
 
-The player prefers the current track's embedded cover, then the album/folder
-cover, then a placeholder. Album browsing continues to prefer folder artwork.
-Collection management shows X/Delete in the footer; A confirms removal, B cancels.
-Media files are retained, and the last collection cannot be removed.
+[More documentation](https://github.com/heilmic/CoverPlayer/blob/main/docs/README.md) ·
+[Switch guide](https://github.com/heilmic/CoverPlayer/blob/main/packaging/switch/README.md)
 
-For Nintendo Switch, use the [separate NRO package and guide](https://github.com/heilmic/CoverPlayer/blob/main/docs/switch.md).
+License: `LICENSE` · Dependencies: `THIRD_PARTY_NOTICES.md`
