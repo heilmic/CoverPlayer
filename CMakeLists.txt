@@ -71,7 +71,8 @@ if(BUILD_TESTING AND COVERPLAYER_BUILD_TESTS)
     add_executable(coverplayer_cover_flow_motion_test tests/cover_flow_motion_test.cpp)
     target_include_directories(coverplayer_cover_flow_motion_test PRIVATE src)
     add_test(NAME cover_flow_motion COMMAND coverplayer_cover_flow_motion_test)
-    add_executable(coverplayer_renderer_cache_test tests/renderer_cover_cache_test.cpp src/platform/sdl/sdl_renderer.cpp)
+    add_executable(coverplayer_renderer_cache_test tests/renderer_cover_cache_test.cpp
+        src/platform/sdl/sdl_renderer.cpp src/platform/sdl/handheld_renderer.cpp)
     target_include_directories(coverplayer_renderer_cache_test PRIVATE include src)
     target_link_libraries(coverplayer_renderer_cache_test PRIVATE Threads::Threads PkgConfig::SDL2 PkgConfig::SDL2_IMAGE PkgConfig::SDL2_TTF)
     add_test(NAME renderer_cover_cache COMMAND coverplayer_renderer_cache_test)
@@ -119,6 +120,7 @@ if(BUILD_TESTING AND COVERPLAYER_BUILD_TESTS)
     add_executable(coverplayer_screenshot_tool
         tests/screenshot_tool.cpp
         src/platform/sdl/sdl_renderer.cpp
+        src/platform/sdl/handheld_renderer.cpp
     )
     target_include_directories(coverplayer_screenshot_tool PRIVATE include src)
     target_link_libraries(coverplayer_screenshot_tool PRIVATE Threads::Threads PkgConfig::SDL2 PkgConfig::SDL2_TTF PkgConfig::SDL2_IMAGE)
@@ -132,6 +134,7 @@ if(NINTENDO_SWITCH)
 else()
     set(COVERPLAYER_PLATFORM_SOURCES
         src/main.cpp
+        src/platform/sdl/handheld_renderer.cpp
         src/platform/sdl/playback_power.cpp
         src/platform/sdl/sdl_platform.cpp
         src/platform/sdl/linux_audio_system.cpp

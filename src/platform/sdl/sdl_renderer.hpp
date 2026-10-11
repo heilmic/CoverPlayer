@@ -57,9 +57,10 @@ private:
         bool middleEllipsis = false;
     };
 
-    void renderHandheldUi();
 #ifdef COVERPLAYER_SWITCH_UI
     void renderSwitchUi();
+#else
+    void renderHandheldUi();
 #endif
     void renderCoverFlow();
     void drawCover(int x, int y, int width, int height);

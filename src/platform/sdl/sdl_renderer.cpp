@@ -1,4 +1,5 @@
 #include "platform/sdl/sdl_renderer.hpp"
+#include "platform/sdl/ui_content.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -8,48 +9,16 @@
 #include <vector>
 
 namespace coverplayer::platform {
+using ui::utf8Length;
+using ui::utf8ByteOffsetOfCodepoint;
+using ui::profile;
 namespace {
-
-// Counts UTF-8 codepoints (not bytes) so text fitting never splits a
-// multi-byte sequence, which would otherwise corrupt the trailing
-// character of a truncated German umlaut/ID3-tag string.
-std::size_t utf8Length(const std::string& text) {
-    std::size_t count = 0;
-    for (const unsigned char character : text) if ((character & 0xC0U) != 0x80U) ++count;
-    return count;
-}
-
-std::size_t utf8ByteOffsetOfCodepoint(const std::string& text, std::size_t codepointIndex) {
-    std::size_t byteIndex = 0;
-    std::size_t seen = 0;
-    while (byteIndex < text.size() && seen < codepointIndex) {
-        ++byteIndex;
-        while (byteIndex < text.size() && (static_cast<unsigned char>(text[byteIndex]) & 0xC0U) == 0x80U) ++byteIndex;
-        ++seen;
-    }
-    return byteIndex;
-}
 
 // The mint-green brand accent means "selected" everywhere (list cursor,
 // CoverFlow underline, header accent). Playback/Bluetooth activity gets its
 // own color so "this is on/playing" is never visually confused with "this
 // is the cursor position".
 constexpr SDL_Color kActiveAccent{86, 163, 255, 255};
-
-struct HelpRow {
-    const char* key = nullptr;
-    const char* action = nullptr;
-};
-
-std::string formatTime(double value) {
-    const int seconds = std::max(0, static_cast<int>(value));
-    const int hours = seconds / 3600;
-    const int minutes = (seconds / 60) % 60;
-    const int remainder = seconds % 60;
-    if (hours > 0) return std::to_string(hours) + ":" + (minutes < 10 ? "0" : "") +
-        std::to_string(minutes) + ":" + (remainder < 10 ? "0" : "") + std::to_string(remainder);
-    return std::to_string(seconds / 60) + ":" + (remainder < 10 ? "0" : "") + std::to_string(remainder);
-}
 
 } // namespace
 
@@ -59,36 +28,28 @@ SdlRenderer::SdlRenderer() {
     }
     IMG_Init(IMG_INIT_JPG | IMG_INIT_PNG);
 
-    int windowWidth = 640;
-    int windowHeight = 480;
-#ifdef COVERPLAYER_SWITCH_UI
-    windowWidth = 1280;
-    windowHeight = 720;
-    uiWidth_ = 1280;
-#else
-    SDL_DisplayMode display{};
-    const bool hasDisplayMode = SDL_GetCurrentDisplayMode(0, &display) == 0;
-    const char* requestedWidth = SDL_getenv("COVERPLAYER_UI_WIDTH");
-    if (requestedWidth != nullptr && std::string(requestedWidth) == "720") {
-        uiWidth_ = windowWidth = 720;
-    } else if (requestedWidth == nullptr && hasDisplayMode &&
-        display.w >= 720 && display.w <= 960 && display.h >= 480 && display.h <= 640 &&
-        std::abs(static_cast<float>(display.w) / display.h - 1.5F) < 0.03F) {
-        // Use the available width on compact 3:2 handheld screens. The
-        // original 640x480 design remains unchanged on 4:3 displays.
-        uiWidth_ = 720;
-        windowWidth = display.w;
-        windowHeight = display.h;
+    int windowWidth = profile.width;
+    int windowHeight = profile.height;
+    uiWidth_ = profile.width;
+    if constexpr (!profile.switchUi) {
+        SDL_DisplayMode display{};
+        const bool hasDisplayMode = SDL_GetCurrentDisplayMode(0, &display) == 0;
+        const char* requestedWidth = SDL_getenv("COVERPLAYER_UI_WIDTH");
+        if (requestedWidth != nullptr && std::string(requestedWidth) == "720") {
+            uiWidth_ = windowWidth = 720;
+        } else if (requestedWidth == nullptr && hasDisplayMode && display.w >= 720 && display.w <= 960 &&
+                   display.h >= 480 && display.h <= 640 &&
+                   std::abs(static_cast<float>(display.w) / display.h - 1.5F) < 0.03F) {
+            // Use the available width on compact 3:2 handheld screens. The
+            // original 640x480 design remains unchanged on 4:3 displays.
+            uiWidth_ = 720;
+            windowWidth = display.w;
+            windowHeight = display.h;
+        }
     }
-#endif
 
-    window_ = SDL_CreateWindow(
-        "CoverPlayer",
-        SDL_WINDOWPOS_CENTERED,
-        SDL_WINDOWPOS_CENTERED,
-        windowWidth,
-        windowHeight,
-        SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE);
+    window_ = SDL_CreateWindow("CoverPlayer", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, windowWidth,
+                               windowHeight, SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE);
     if (window_ == nullptr) {
         const std::string message = SDL_GetError();
         TTF_Quit();
@@ -107,27 +68,14 @@ SdlRenderer::SdlRenderer() {
         throw std::runtime_error("SDL renderer creation failed: " + message);
     }
 
-#ifdef COVERPLAYER_SWITCH_UI
-    SDL_RenderSetLogicalSize(renderer_, 1280, 720);
-#else
-    SDL_RenderSetLogicalSize(renderer_, uiWidth_, 480);
-#endif
-#ifdef COVERPLAYER_SWITCH_UI
-    SDL_Log("CoverPlayer UI: 1280x720, window: %dx%d", windowWidth, windowHeight);
-#else
-    SDL_Log("CoverPlayer UI: %dx480, window: %dx%d", uiWidth_, windowWidth, windowHeight);
-#endif
+    SDL_RenderSetLogicalSize(renderer_, uiWidth_, profile.height);
+    SDL_Log("CoverPlayer UI: %dx%d, window: %dx%d", uiWidth_, profile.height, windowWidth, windowHeight);
 #ifdef __SWITCH__
     constexpr const char* fontPath = "romfs:/assets/fonts/RobotoMono-Bold.ttf";
 #else
     constexpr const char* fontPath = "assets/fonts/RobotoMono-Bold.ttf";
 #endif
-#ifdef COVERPLAYER_SWITCH_UI
-    constexpr int bodyFontSize = 28, headingFontSize = 40;
-#else
-    constexpr int bodyFontSize = 18, headingFontSize = 26;
-#endif
-    font_ = TTF_OpenFont(fontPath, bodyFontSize);
+    font_ = TTF_OpenFont(fontPath, profile.bodyFontSize);
     if (font_ == nullptr) {
         const std::string message = TTF_GetError();
         SDL_DestroyRenderer(renderer_);
@@ -137,7 +85,7 @@ SdlRenderer::SdlRenderer() {
         TTF_Quit();
         throw std::runtime_error("Font loading failed: " + message);
     }
-    titleFont_ = TTF_OpenFont(fontPath, headingFontSize);
+    titleFont_ = TTF_OpenFont(fontPath, profile.headingFontSize);
     if (titleFont_ == nullptr) {
         const std::string message = TTF_GetError();
         TTF_CloseFont(font_);
@@ -259,11 +207,7 @@ void SdlRenderer::collectCover() {
 
 void SdlRenderer::trimCoverCache() {
     // Switch: <=16 MiB at 512px, handhelds: <=14 MiB at 384px.
-#ifdef COVERPLAYER_SWITCH_UI
-    constexpr std::size_t cacheLimit = 16;
-#else
-    constexpr std::size_t cacheLimit = 24;
-#endif
+    constexpr auto cacheLimit = profile.coverCacheLimit;
     while (coverCache_.size() > cacheLimit) {
         auto oldest = coverCache_.end();
         for (auto it = coverCache_.begin(); it != coverCache_.end(); ++it) {
@@ -280,11 +224,7 @@ void SdlRenderer::trimCoverCache() {
 SDL_Surface* SdlRenderer::decodeCover(const std::string& path) {
     SDL_Surface* source = IMG_Load(path.c_str());
     if (source == nullptr) return nullptr;
-#ifdef COVERPLAYER_SWITCH_UI
-    constexpr int maximumSide = 512;
-#else
-    constexpr int maximumSide = 384;
-#endif
+    constexpr auto maximumSide = profile.maximumCoverSide;
     const float scale = std::min(1.0F, std::min(
         static_cast<float>(maximumSide) / source->w,
         static_cast<float>(maximumSide) / source->h));
@@ -442,24 +382,14 @@ void SdlRenderer::drawPerspectiveCover(SDL_Texture* texture, float offset, Uint8
     const float travel = (distance <= 1.0F
         ? 158.0F * distance + 110.0F * distance * distance * (1.0F - distance)
         : 158.0F + (distance - 1.0F) * 48.0F) *
-#ifdef COVERPLAYER_SWITCH_UI
-        1.5F;
-#else
-        static_cast<float>(uiWidth_) / 640.0F;
-#endif
+(profile.switchUi ? 1.5F : static_cast<float>(uiWidth_) / 640.0F);
     const float centerX = static_cast<float>(uiWidth_) * 0.5F + direction * travel;
     const float smoothTurn = sideDistance * sideDistance * (3.0F - 2.0F * sideDistance);
     const float angle = direction * smoothTurn * 0.98F;
     const float depth = 1.0F + 0.13F * distance;
-#ifdef COVERPLAYER_SWITCH_UI
-    const float halfSize = view_.items.size() == 1 ? 208.0F : 200.0F;
-    constexpr float focalLength = 780.0F;
-    constexpr float centerY = 322.0F;
-#else
-    const float halfSize = view_.items.size() == 1 ? 132.0F : 128.0F;
-    constexpr float focalLength = 520.0F;
-    constexpr float centerY = 214.0F;
-#endif
+    const float halfSize = view_.items.size() == 1 ? profile.singleHalfCoverSize : profile.halfCoverSize;
+    constexpr float focalLength = profile.focalLength;
+    constexpr float centerY = profile.coverCenterY;
     const auto project = [&](float u) {
         const float localX = (u * 2.0F - 1.0F) * halfSize;
         const float scale = focalLength / (focalLength * depth - localX * std::sin(angle));
@@ -555,7 +485,7 @@ void SdlRenderer::drawPerspectiveCover(SDL_Texture* texture, float offset, Uint8
 
 void SdlRenderer::renderCoverFlow() {
     if (view_.items.empty()) {
-        drawFittedText(view_.message, 100, 225, 50, SDL_Color{143,154,170,255});
+        drawFittedText(view_.message, 100, 225, 50, SDL_Color{143, 154, 170, 255});
         return;
     }
     const auto count = view_.items.size();
@@ -565,50 +495,53 @@ void SdlRenderer::renderCoverFlow() {
     std::vector<int> slots;
     for (int slot = 0; slot < static_cast<int>(flowTextures_.size()); ++slot) {
         const auto index = static_cast<long long>(view_.selected) + slot - centerSlot;
-        if (index >= 0 && index < static_cast<long long>(count)) slots.push_back(slot);
+        if (index >= 0 && index < static_cast<long long>(count))
+            slots.push_back(slot);
     }
     std::sort(slots.begin(), slots.end(), [&](int leftSlot, int rightSlot) {
         return std::abs(static_cast<float>(leftSlot - centerSlot) + animationOffset) >
-            std::abs(static_cast<float>(rightSlot - centerSlot) + animationOffset);
+               std::abs(static_cast<float>(rightSlot - centerSlot) + animationOffset);
     });
 
-#ifdef COVERPLAYER_SWITCH_UI
-    const SDL_Rect artworkArea{0, 84, uiWidth_, 450};
-#else
-    const SDL_Rect artworkArea{0, 70, uiWidth_, 288};
-#endif
+    const SDL_Rect artworkArea{0, profile.artworkY, uiWidth_, profile.artworkHeight};
     SDL_RenderSetClipRect(renderer_, &artworkArea);
     for (const int slot : slots) {
         const float offset = static_cast<float>(slot - centerSlot) + animationOffset;
-        const Uint8 brightness = static_cast<Uint8>(std::clamp(255.0F - std::abs(offset) * 42.0F, 100.0F, 255.0F));
+        const Uint8 brightness =
+            static_cast<Uint8>(std::clamp(255.0F - std::abs(offset) * 42.0F, 100.0F, 255.0F));
         drawPerspectiveCover(flowTextures_[static_cast<std::size_t>(slot)], offset, brightness, 255);
     }
     SDL_RenderSetClipRect(renderer_, nullptr);
     const auto captionIndex = static_cast<std::size_t>(std::clamp(
-        std::lround(static_cast<float>(view_.selected) - animationOffset), 0L,
-        static_cast<long>(count - 1)));
+        std::lround(static_cast<float>(view_.selected) - animationOffset), 0L, static_cast<long>(count - 1)));
     const auto separator = view_.items[captionIndex].find('|');
     const auto name = view_.items[captionIndex].substr(0, separator);
-    const auto detail = separator == std::string::npos ? std::string{} : view_.items[captionIndex].substr(separator + 1);
+    const auto detail =
+        separator == std::string::npos ? std::string{} : view_.items[captionIndex].substr(separator + 1);
     int textWidth = 0, textHeight = 0;
     TTF_SizeUTF8(titleFont_, name.c_str(), &textWidth, &textHeight);
-#ifdef COVERPLAYER_SWITCH_UI
-    // Fit before measuring so long captions remain visually centered.
-    const int capacity = textCapacity(uiWidth_ - 96, titleFont_);
-    const auto fitted = utf8Length(name) > static_cast<std::size_t>(capacity)
-        ? name.substr(0, utf8ByteOffsetOfCodepoint(name, static_cast<std::size_t>(capacity - 3))) + "..." : name;
-    TTF_SizeUTF8(titleFont_, fitted.c_str(), &textWidth, &textHeight);
-    drawText(fitted.c_str(), (uiWidth_ - textWidth) / 2, 548, SDL_Color{244,247,251,255}, titleFont_);
-#else
-    drawFittedText(name, std::max(20, (uiWidth_ - textWidth) / 2), 362, 38 + (uiWidth_ - 640) / 14, SDL_Color{244,247,251,255}, titleFont_);
-#endif
+    if constexpr (profile.switchUi) {
+        // Fit before measuring so long captions remain visually centered.
+        const int capacity = textCapacity(uiWidth_ - 96, titleFont_);
+        const auto fitted =
+            utf8Length(name) > static_cast<std::size_t>(capacity)
+                ? name.substr(0, utf8ByteOffsetOfCodepoint(name, static_cast<std::size_t>(capacity - 3))) +
+                      "..."
+                : name;
+        TTF_SizeUTF8(titleFont_, fitted.c_str(), &textWidth, &textHeight);
+        drawText(fitted.c_str(), (uiWidth_ - textWidth) / 2, 548, SDL_Color{244, 247, 251, 255}, titleFont_);
+    } else {
+        drawFittedText(name, std::max(20, (uiWidth_ - textWidth) / 2), 362, 38 + (uiWidth_ - 640) / 14,
+                       SDL_Color{244, 247, 251, 255}, titleFont_);
+    }
     const std::string meta = detail + "    " + std::to_string(captionIndex + 1) + "/" + std::to_string(count);
     TTF_SizeUTF8(font_, meta.c_str(), &textWidth, &textHeight);
-#ifdef COVERPLAYER_SWITCH_UI
-    drawFittedText(meta, std::max(48, (uiWidth_ - textWidth) / 2), 596, textCapacity(uiWidth_ - 96), SDL_Color{143,154,170,255});
-#else
-    drawText(meta.c_str(), std::max(20, (uiWidth_ - textWidth) / 2), 394, SDL_Color{143,154,170,255});
-#endif
+    if constexpr (profile.switchUi) {
+        drawFittedText(meta, std::max(48, (uiWidth_ - textWidth) / 2), 596, textCapacity(uiWidth_ - 96),
+                       SDL_Color{143, 154, 170, 255});
+    } else {
+        drawText(meta.c_str(), std::max(20, (uiWidth_ - textWidth) / 2), 394, SDL_Color{143, 154, 170, 255});
+    }
 }
 
 void SdlRenderer::drawPlaybackSymbol(int centerX, int centerY, bool paused) {
@@ -617,7 +550,8 @@ void SdlRenderer::drawPlaybackSymbol(int centerX, int centerY, bool paused) {
     SDL_RenderFillRect(renderer_, &button);
     SDL_SetRenderDrawColor(renderer_, 10, 18, 20, 255);
     if (paused) {
-        for (int row = -11; row <= 11; ++row) SDL_RenderDrawLine(renderer_, centerX - 7, centerY + row, centerX + 11, centerY);
+        for (int row = -11; row <= 11; ++row)
+            SDL_RenderDrawLine(renderer_, centerX - 7, centerY + row, centerX + 11, centerY);
     } else {
         const SDL_Rect left{centerX - 8, centerY - 11, 6, 22};
         const SDL_Rect right{centerX + 4, centerY - 11, 6, 22};
@@ -661,12 +595,7 @@ void SdlRenderer::drawSelectableList(const std::vector<std::string>& items, std:
         }
         drawFittedText(name, layout.x + 16, y, layout.maxCharacters, primaryColor);
         if (layout.twoLine && !detail.empty()) {
-            drawFittedText(detail, layout.x + 16, y +
-#ifdef COVERPLAYER_SWITCH_UI
-                34,
-#else
-                20,
-#endif
+            drawFittedText(detail, layout.x + 16, y + profile.listDetailOffset,
                 layout.maxCharacters, SDL_Color{125, 137, 154, 255});
         }
     }
@@ -710,216 +639,6 @@ void SdlRenderer::drawBatteryIcon(int x, int y, int percent) {
     SDL_RenderDrawPoint(renderer_, x + 20, y);
     SDL_RenderDrawPoint(renderer_, x, y + 14);
     SDL_RenderDrawPoint(renderer_, x + 20, y + 14);
-}
-
-void SdlRenderer::renderHandheldUi() {
-    const int extraWidth = uiWidth_ - 640;
-    SDL_SetRenderDrawColor(renderer_,12,15,22,255);SDL_RenderClear(renderer_);
-    SDL_SetRenderDrawColor(renderer_,24,30,42,255);const SDL_Rect header{0,0,uiWidth_,70};SDL_RenderFillRect(renderer_,&header);
-    SDL_SetRenderDrawColor(renderer_,92,211,151,255);const SDL_Rect accent{0,68,uiWidth_,3};SDL_RenderFillRect(renderer_,&accent);
-    drawText("COVER",20,20,SDL_Color{92,211,151,255});drawText("PLAYER",86,20,SDL_Color{244,247,251,255});
-    const char* section = "JETZT LAEUFT";
-    if (view_.screen == Screen::Collections) section = "BIBLIOTHEK";
-    else if (view_.screen == Screen::CollectionManager) section = "SAMMLUNGEN";
-    else if (view_.screen == Screen::CollectionType) section = "TYP";
-    else if (view_.screen == Screen::CollectionName) section = "NAME";
-    else if (view_.screen == Screen::CollectionDelete) section = "LOESCHEN";
-    else if (view_.screen == Screen::CoverFlow) section = "COVERFLOW";
-    else if (view_.screen == Screen::AlbumList) section = "ALBUMLISTE";
-    else if (view_.screen == Screen::Tracks) section = "TITEL";
-    else if (view_.screen == Screen::Folders) section = "ORDNER";
-    else if (view_.screen == Screen::Bluetooth) section = "BLUETOOTH";
-    if(view_.screen==Screen::Player){
-        drawText(tr(language_,section),252+extraWidth,22,SDL_Color{155,166,184,255});drawBluetoothIcon(400+extraWidth,20);
-#ifndef __SWITCH__
-        const std::string volume="VOL "+std::to_string(volumePercent_)+"%";drawText(volume.c_str(),430+extraWidth,22,SDL_Color{203,210,220,255});
-#endif
-        if(batteryPercent_){drawBatteryIcon(528+extraWidth,24,*batteryPercent_);const std::string battery=std::to_string(*batteryPercent_)+"%";drawText(battery.c_str(),558+extraWidth,22,SDL_Color{203,210,220,255});}
-        if(sleepMinutes_>0){const std::string sleep=std::to_string(sleepMinutes_)+"m";drawText(sleep.c_str(),607+extraWidth,22,SDL_Color{242,190,92,255});}
-    } else {
-        drawBluetoothIcon(433+extraWidth,20);
-        // The section label and the sleep badge each get a fixed slot so
-        // neither hides the other - previously the sleep timer replaced the
-        // screen name entirely, which lost the "where am I" context.
-        drawFittedText(tr(language_,section),458+extraWidth,22,12,SDL_Color{155,166,184,255});
-        if(sleepMinutes_>0){const std::string sleep=std::to_string(sleepMinutes_)+"m";drawText(sleep.c_str(),606+extraWidth,22,SDL_Color{242,190,92,255});}
-    }
-
-    if(view_.screen==Screen::CoverFlow){
-        renderCoverFlow();
-    } else if(view_.screen==Screen::Player){
-        // Keep the cover prominent and wrap the track details within the
-        // remaining width, including on the narrower 640px handheld.
-        drawCover(25,100,225,225);
-        const int detailX=275, detailWidth=uiWidth_-detailX-24;
-        // Switch sooner than the raw three-line capacity: breaking on words
-        // can otherwise elide an important word even when the character
-        // count alone suggests it should fit.
-        TTF_Font* trackFont=utf8Length(view_.title)>static_cast<std::size_t>(2*textCapacity(detailWidth,titleFont_))?font_:titleFont_;
-        const int titleLineHeight=trackFont==titleFont_?32:25;
-        const int titleLines=drawWrappedText(view_.title,detailX,100,detailWidth,titleLineHeight,3,SDL_Color{244,247,251,255},trackFont);
-        const int subtitleY=100+titleLines*titleLineHeight+12;
-        const int subtitleLines=drawWrappedText(view_.subtitle,detailX,subtitleY,detailWidth,24,2,SDL_Color{143,154,170,255});
-        const int bookmarkY=subtitleY+subtitleLines*24+8;
-        drawText((std::string(tr(language_,"LESEZEICHEN"))+"  "+std::to_string(bookmarkCount_)).c_str(),detailX,bookmarkY,SDL_Color{143,154,170,255});
-        const int statusY=bookmarkY+28;
-        if(!view_.message.empty())drawFittedText(view_.message,detailX,statusY,textCapacity(detailWidth),SDL_Color{242,118,109,255});
-        else if(!notice_.empty())drawFittedText(notice_,detailX,statusY,textCapacity(detailWidth),SDL_Color{242,190,92,255});
-
-        // The rail is a clean, uninterrupted bar; the play/pause symbol gets
-        // its own row below it instead of sitting on top of the rail, with
-        // the elapsed/remaining time flanking it on the same row.
-        const int railX=24, railY=335, railWidth=uiWidth_-48;
-        SDL_SetRenderDrawColor(renderer_,42,49,62,255);const SDL_Rect rail{railX,railY,railWidth,8};SDL_RenderFillRect(renderer_,&rail);
-        if(playbackDurationSeconds_>0.0){const auto progress=std::min(1.0,playbackPositionSeconds_/playbackDurationSeconds_);SDL_SetRenderDrawColor(renderer_,kActiveAccent.r,kActiveAccent.g,kActiveAccent.b,kActiveAccent.a);const SDL_Rect filled{railX,railY,static_cast<int>(railWidth*progress),8};SDL_RenderFillRect(renderer_,&filled);}
-        const int transportY=375;
-        drawPlaybackSymbol(uiWidth_/2,transportY,playbackPaused_);
-        drawText(formatTime(playbackPositionSeconds_).c_str(),railX,transportY-11,SDL_Color{203,210,220,255});
-        const auto duration=playbackDurationSeconds_>0.0?formatTime(playbackDurationSeconds_):"--:--";int durationWidth=0,durationHeight=0;TTF_SizeUTF8(font_,duration.c_str(),&durationWidth,&durationHeight);drawText(duration.c_str(),uiWidth_-24-durationWidth,transportY-11,SDL_Color{203,210,220,255});
-    } else if(view_.screen==Screen::Collections||view_.screen==Screen::AlbumList) {
-        drawFittedText(view_.title,24,82,32+extraWidth/16,SDL_Color{244,247,251,255},titleFont_);
-        drawCover(24,126,122,122);
-        drawSelectableList(view_.items,view_.selected,{166,uiWidth_-190,49,120,6,39+extraWidth/11,true});
-        if(!view_.message.empty())drawFittedText(view_.message,24,391,58+extraWidth/11,SDL_Color{143,154,170,255});
-    } else if(view_.screen==Screen::CollectionManager) {
-        drawFittedText(view_.title,24,82,30+extraWidth/16,SDL_Color{244,247,251,255},titleFont_);
-        if(!view_.coverPath.empty())drawCover(uiWidth_-140,124,104,104);
-        drawSelectableList(view_.items,view_.selected,{24,uiWidth_-188,43,126,6,38+extraWidth/11,true});
-        if(!view_.message.empty())drawFittedText(view_.message,24,389,57+extraWidth/11,SDL_Color{143,154,170,255});
-    } else if(view_.screen==Screen::Bluetooth) {
-        drawFittedText(view_.title,24,84,30+extraWidth/16,SDL_Color{244,247,251,255},titleFont_);
-        drawFittedText(view_.subtitle,24,132,60+extraWidth/11,SDL_Color{143,154,170,255});
-        drawSelectableList(view_.items,view_.selected,{24,uiWidth_-48,31,184,7,57+extraWidth/11,false});
-        if(!view_.message.empty())drawFittedText(view_.message,24,397,64+extraWidth/11,SDL_Color{242,190,92,255});
-    } else if(view_.screen==Screen::CollectionName) {
-        drawText(tr(language_,"NAME DER SAMMLUNG"),24,94,SDL_Color{143,154,170,255});
-        SDL_SetRenderDrawColor(renderer_,31,38,50,255);const SDL_Rect nameField{24,121,uiWidth_-48,42};SDL_RenderFillRect(renderer_,&nameField);
-        SDL_SetRenderDrawColor(renderer_,92,211,151,255);const SDL_Rect nameMarker{24,121,4,42};SDL_RenderFillRect(renderer_,&nameMarker);
-        drawFittedText(view_.subtitle,40,131,52+extraWidth/11,SDL_Color{244,247,251,255});
-        for(std::size_t index=0;index<view_.items.size();++index){
-            const int column=static_cast<int>(index%10),row=static_cast<int>(index/10);
-            const int cellWidth=(uiWidth_-48)/10;
-            const int x=24+column*cellWidth,y=177+row*31;
-            if(index==view_.selected){SDL_SetRenderDrawColor(renderer_,45,82,70,255);const SDL_Rect selected{x,y,cellWidth-5,27};SDL_RenderFillRect(renderer_,&selected);}
-            const auto& key=view_.items[index];
-            drawFittedText(key,x+(key.size()>1?3:(cellWidth-19)/2),y+4,6,index==view_.selected?SDL_Color{244,247,251,255}:SDL_Color{158,168,184,255});
-        }
-        if(!view_.message.empty())drawFittedText(view_.message,24,401,65+extraWidth/11,SDL_Color{242,190,92,255});
-    } else if(view_.screen==Screen::Tracks) {
-        // Keep the album artwork as context, then give every track the full
-        // 640/720px list width. The selected filename is also shown above
-        // the list on two lines so similar long names remain distinguishable.
-        if(!view_.coverPath.empty()) drawCover(25,88,84,84);
-        const int headingX=view_.coverPath.empty()?24:130;
-        drawFittedText(view_.title,headingX,88,textCapacity(uiWidth_-headingX-24,titleFont_),SDL_Color{244,247,251,255},titleFont_);
-        if(view_.selected<view_.items.size()) {
-            drawWrappedText(view_.items[view_.selected],headingX,128,uiWidth_-headingX-24,24,2,SDL_Color{203,210,220,255});
-        }
-        drawSelectableList(view_.items,view_.selected,{24,uiWidth_-48,31,199,7,textCapacity(uiWidth_-80),false,true});
-        if(!view_.message.empty())drawFittedText(view_.message,headingX,174,textCapacity(uiWidth_-headingX-24),SDL_Color{143,154,170,255});
-    } else {
-        const bool hasCover=!view_.coverPath.empty();const int listX=hasCover?272:24;const int listWidth=hasCover?uiWidth_-294:uiWidth_-48;const int maxCharacters=(hasCover?20:37)+extraWidth/11;
-        if(hasCover) drawCover(25,100,225,225);
-        drawFittedText(view_.title,hasCover?280:24,88,(hasCover?20:37)+extraWidth/16,SDL_Color{244,247,251,255},titleFont_);
-        drawSelectableList(view_.items,view_.selected,{listX,listWidth,31,134,9,maxCharacters,false});
-        if(!view_.message.empty())drawFittedText(view_.message,25,345,65+extraWidth/11,SDL_Color{143,154,170,255});
-    }
-    SDL_SetRenderDrawColor(renderer_,19,23,32,255);const SDL_Rect footer{0,423,uiWidth_,57};SDL_RenderFillRect(renderer_,&footer);
-    const char* primaryHint = "A OEFFNEN   Y VERWALTEN   X SCANNEN";
-    switch (view_.screen) {
-        case Screen::Player: primaryHint = "A PAUSE   OBEN/UNTEN TITEL   B ZURUECK"; break;
-        case Screen::Folders: primaryHint = "A OEFFNEN   Y ORDNER WAEHLEN"; break;
-        case Screen::CollectionManager: primaryHint = "A EDIT   Y PFAD   X LOESCHEN"; break;
-        case Screen::CollectionType: primaryHint = "A TYP WAEHLEN   B ZURUECK"; break;
-        case Screen::CollectionName: primaryHint = "A ZEICHEN   Y SPEICHERN   B ABBRECHEN"; break;
-        case Screen::CollectionDelete: primaryHint = "A LOESCHEN   B ABBRECHEN"; break;
-        case Screen::Bluetooth: primaryHint = "A VERBINDEN   X AN/AUS   B ZURUECK"; break;
-        case Screen::CoverFlow: primaryHint = "A OEFFNEN   Y LISTE   B ZURUECK"; break;
-        case Screen::AlbumList: primaryHint = "A OEFFNEN   Y COVERFLOW   B ZURUECK"; break;
-        case Screen::Tracks: primaryHint = "A ABSPIELEN   B ZURUECK"; break;
-        default: break;
-    }
-    drawFittedText(tr(language_,primaryHint),18,view_.screen==Screen::Player?427:442,40+extraWidth/11,SDL_Color{171,181,196,255});
-    if (view_.screen==Screen::Player)
-#ifdef __SWITCH__
-        drawFittedText(language_==Language::German?"PLUS KURZ SLEEP / LANG BEENDEN":"TAP PLUS SLEEP / HOLD PLUS QUIT",18,451,40+extraWidth/11,SDL_Color{171,181,196,255});
-#else
-        drawFittedText(tr(language_,"START KURZ SLEEP / LANG HINTERGRUND"),18,451,40+extraWidth/11,SDL_Color{171,181,196,255});
-#endif
-    SDL_SetRenderDrawColor(renderer_,37,71,61,255);const SDL_Rect helpBadge{uiWidth_-162,430,146,38};SDL_RenderFillRect(renderer_,&helpBadge);
-#ifdef __SWITCH__
-    drawText(language_==Language::German?"MINUS HILFE":"MINUS HELP",uiWidth_-156,440,SDL_Color{232,247,239,255});
-#else
-    drawText(tr(language_,"SELECT HILFE"),uiWidth_-156,440,SDL_Color{232,247,239,255});
-#endif
-    if(helpVisible_){
-        SDL_SetRenderDrawBlendMode(renderer_,SDL_BLENDMODE_NONE);
-        SDL_SetRenderDrawColor(renderer_,7,9,14,255);
-        const SDL_Rect backdrop{0,70,uiWidth_,410};SDL_RenderFillRect(renderer_,&backdrop);
-        SDL_SetRenderDrawColor(renderer_,19,25,34,255);
-        const SDL_Rect panel{24,76,uiWidth_-48,342};SDL_RenderFillRect(renderer_,&panel);
-        drawText(tr(language_,"BEDIENUNG"),44,88,SDL_Color{92,211,151,255});
-        drawText(tr(language_,"TASTE"),58,121,SDL_Color{143,154,170,255});
-        drawText(tr(language_,"AKTION"),220,121,SDL_Color{143,154,170,255});
-        SDL_SetRenderDrawColor(renderer_,51,61,73,255);
-        SDL_RenderDrawLine(renderer_,44,145,uiWidth_-44,145);
-        std::array<HelpRow,7> rows{};
-        const char* note = view_.screen == Screen::Player ? "Linker Stick = Steuerkreuz"
-            : "Kreuz / linker Stick: halten = schneller";
-        switch (view_.screen) {
-            case Screen::Player: rows={{{"A","Wiedergabe / Pause"},{"LINKS/RECHTS","10 Sek. spulen"},{"L1/R1","30 Sek. spulen"},{"OBEN/UNTEN","Titel wechseln"},{"Y / X","Lesezeichen setzen / naechstes"},{"START KURZ","Sleep-Timer"},{"START 2s","Hintergrundwiedergabe"}}}; break;
-            case Screen::Collections: rows={{{"A","Sammlung oeffnen"},{"STEUERKREUZ","Sammlung waehlen"},{"Y","Sammlungen verwalten"},{"X","Bibliothek scannen"},{"B","App bleibt geoeffnet"}}}; break;
-            case Screen::CollectionManager: rows={{{"A","Typ und Namen bearbeiten"},{"Y","Pfad bearbeiten / neu anlegen"},{"X","Sammlung loeschen"},{"L1/R1","Reihenfolge verschieben"},{"B","Zurueck zur Bibliothek"}}}; break;
-            case Screen::CollectionType: rows={{{"A","Sammlungstyp waehlen"},{"STEUERKREUZ","Typ auswaehlen"},{"B","Zurueck"}}}; break;
-            case Screen::CollectionDelete: rows={{{"A","Sammlung entfernen"},{"B","Abbrechen"}}}; note="Mediendateien werden nie geloescht"; break;
-            case Screen::CollectionName: rows={{{"A","Zeichen anfuegen"},{"X","Letztes Zeichen loeschen"},{"L1","Namen komplett leeren"},{"Y","Sammlung speichern"},{"B","Abbrechen"}}}; break;
-            case Screen::Bluetooth: rows={{{"A","Verbinden / trennen"},{"X","Bluetooth an / aus"},{"Y","Status aktualisieren"},{"B","Zurueck"}}}; note="Neue Geraete in Knulli koppeln"; break;
-            case Screen::CoverFlow:
-            case Screen::AlbumList: rows={{{"A","Ordner / Medium oeffnen"},{"B","Eine Ebene zurueck"},{"LINKS/RECHTS","Eintrag waehlen"},{"Y","CoverFlow / Liste"},{"X","Sammlung neu scannen"}}}; break;
-            case Screen::Tracks: rows={{{"A","Abspielen / Fortsetzen"},{"B","Zurueck zur Albumansicht"},{"STEUERKREUZ","Titel auswaehlen"}}}; note="Fortsetzbarer Titel ist vorausgewaehlt"; break;
-            case Screen::Folders: rows={{{"A","Ordner oeffnen"},{"B","Zurueck"},{"Y","Diesen Ordner auswaehlen"}}}; break;
-        }
-#ifdef __SWITCH__
-        if (view_.screen==Screen::Player) {
-            rows[5]={language_==Language::German?"PLUS KURZ":"TAP PLUS","Sleep-Timer"};
-            rows[6]={"PLUS 2s",language_==Language::German?"App beenden":"Quit app"};
-        }
-#endif
-        for (std::size_t index=0;index<rows.size() && rows[index].key!=nullptr;++index) {
-            const int y=151+static_cast<int>(index)*31;
-            if (index%2==0) {
-                SDL_SetRenderDrawColor(renderer_,25,32,42,255);
-                const SDL_Rect stripe{40,y-3,uiWidth_-80,30};SDL_RenderFillRect(renderer_,&stripe);
-            }
-            SDL_SetRenderDrawColor(renderer_,39,72,64,255);
-            const SDL_Rect keycap{48,y,153,25};SDL_RenderFillRect(renderer_,&keycap);
-            SDL_SetRenderDrawColor(renderer_,92,211,151,255);SDL_RenderDrawRect(renderer_,&keycap);
-            const char* key=tr(language_,rows[index].key);
-#ifdef __SWITCH__
-            if (std::strcmp(rows[index].key,"L1/R1")==0) key="L/R";
-            if (std::strcmp(rows[index].key,"L1")==0) key="L";
-#endif
-            int keyWidth=0,keyHeight=0;
-            TTF_SizeUTF8(font_,key,&keyWidth,&keyHeight);
-            drawFittedText(key,48+std::max(4,(153-keyWidth)/2),y+3,13,SDL_Color{232,247,239,255});
-            drawFittedText(tr(language_,rows[index].action),220,y+3,34+extraWidth/11,SDL_Color{244,247,251,255});
-        }
-        if (note!=nullptr) drawFittedText(tr(language_,note),48,365,48+extraWidth/11,SDL_Color{143,154,170,255});
-#ifdef __SWITCH__
-        drawFittedText(language_==Language::German?"PLUS+MINUS  Beenden (Hilfe zu)":"PLUS+MINUS  Quit (close help)",48,390,48+extraWidth/11,SDL_Color{242,190,92,255});
-#else
-        drawFittedText(tr(language_,"START+SELECT  App beenden (Hilfe zu)"),48,390,48+extraWidth/11,SDL_Color{242,190,92,255});
-#endif
-        SDL_SetRenderDrawColor(renderer_,19,23,32,255);const SDL_Rect helpFooter{0,423,uiWidth_,57};SDL_RenderFillRect(renderer_,&helpFooter);
-        drawText(language_==Language::German?"Y ENGLISH":"Y DEUTSCH",18,442,SDL_Color{92,211,151,255});
-        if(bluetoothCapable_&&view_.screen!=Screen::Bluetooth)drawText("X BLUETOOTH",180,442,SDL_Color{171,181,196,255});
-#ifdef __SWITCH__
-        drawText(language_==Language::German?"B / MINUS SCHLIESSEN":"B / MINUS CLOSE",uiWidth_-254,442,SDL_Color{171,181,196,255});
-#else
-        drawText(tr(language_,"B / SELECT SCHLIESSEN"),uiWidth_-254,442,SDL_Color{171,181,196,255});
-#endif
-    }
-    SDL_RenderPresent(renderer_);
 }
 
 } // namespace coverplayer::platform
