@@ -21,6 +21,8 @@ class FakePlatform final : public coverplayer::platform::Platform {
     std::vector<bool> pausedStates;
     std::vector<int> sleepTimers;
     std::map<std::size_t, std::function<void()>> pollEffects;
+    std::optional<std::size_t> currentStep;
+    std::map<std::size_t, std::size_t> viewIndexAfterStep;
     std::size_t append(coverplayer::platform::InputActions action, std::function<void()> before = {}) {
         const auto step = script.size();
         script.push_back(std::move(action));
@@ -29,7 +31,7 @@ class FakePlatform final : public coverplayer::platform::Platform {
         return step;
     }
     const coverplayer::platform::ViewModel& viewAfter(std::size_t step) const {
-        return views.at(step + 1);
+        return views.at(viewIndexAfterStep.at(step));
     }
     bool pausedAfter(std::size_t step) const {
         return pausedStates.at(step);
@@ -57,6 +59,7 @@ class FakePlatform final : public coverplayer::platform::Platform {
         return backgroundSupported;
     }
     coverplayer::platform::InputActions pollEvents() override {
+        currentStep = cursor;
         if (beforePoll)
             beforePoll(cursor);
         const auto effect = pollEffects.find(cursor);
@@ -68,6 +71,10 @@ class FakePlatform final : public coverplayer::platform::Platform {
         pausedStates.push_back(paused);
     }
     void setView(coverplayer::platform::ViewModel view) override {
+        // Library scans may publish several views before the first input or
+        // during a rescan. Only the last view for this input is its result.
+        if (currentStep)
+            viewIndexAfterStep[*currentStep] = views.size();
         views.push_back(std::move(view));
     }
     void setSleepTimer(int minutes) override {
