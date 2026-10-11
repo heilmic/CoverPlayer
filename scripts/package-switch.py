@@ -11,6 +11,9 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--docker-image", required=True)
 args = parser.parse_args()
 root = Path(__file__).resolve().parents[1]
+base_version, switch_alpha = (root / "VERSION").read_text(encoding="ascii").splitlines()
+nacp_version = f"{base_version}-sw-a{switch_alpha}"
+package_name = f"CoverPlayer-Switch-{base_version}-alpha{switch_alpha}"
 build = root / "build/switch-alpha"
 release = root / "build/release"
 release.mkdir(parents=True, exist_ok=True)
@@ -27,7 +30,7 @@ nacp_offset, nacp_size = sections[1]
 nacp = nro[nro_size + nacp_offset:nro_size + nacp_offset + nacp_size]
 assert nacp_size == 0x4000
 assert nacp[:512].split(b"\0", 1)[0] == b"CoverPlayer"
-assert nacp[0x3060:0x3070].split(b"\0", 1)[0] == b"1.0.0-sw-a5"
+assert nacp[0x3060:0x3070].split(b"\0", 1)[0] == nacp_version.encode("ascii"), "Built NACP version differs from VERSION"
 font = (root / "assets/fonts/RobotoMono-Bold.ttf").read_bytes()
 romfs_offset, romfs_size = sections[2]
 assert font in nro[nro_size + romfs_offset:nro_size + romfs_offset + romfs_size]
@@ -54,20 +57,20 @@ for dirname in ("licenses", "relink"):
 
 # Include the actual working source, including the new Switch files. Nothing
 # depends on an unpushed Git revision or a mutable remote source checkout.
-source_paths = [root / name for name in ("CMakeLists.txt", "LICENSE", "THIRD_PARTY_NOTICES.md")]
-for dirname in ("include", "src", "assets/fonts", "packaging/switch"):
+source_paths = [root / name for name in ("CMakeLists.txt", "VERSION", "LICENSE", "THIRD_PARTY_NOTICES.md")]
+for dirname in ("cmake", "include", "src", "assets/fonts", "packaging/switch"):
     source_paths.extend(p for p in (root / dirname).rglob("*") if p.is_file())
 source_buffer = io.BytesIO()
 with tarfile.open(fileobj=source_buffer, mode="w:gz") as archive:
     for path in sorted(source_paths):
         archive.add(path, arcname=path.relative_to(root).as_posix())
 files["relink/coverplayer-source.tar.gz"] = source_buffer.getvalue()
-files["BUILD.txt"] = (f"CoverPlayer Switch alpha 5\nDocker image: {args.docker_image}\n"
+files["BUILD.txt"] = (f"CoverPlayer {base_version} Switch alpha {switch_alpha}\nDocker image: {args.docker_image}\n"
                       "Hardware: user confirmed collection creation and MP3 playback in alpha 2 on Switch; Lite test pending.\n").encode()
 files["SHA256SUMS.txt"] = "".join(
     f"{hashlib.sha256(data).hexdigest()}  {name}\n" for name, data in sorted(files.items())
 ).encode()
-target = release / "CoverPlayer-Switch-1.0.0-alpha5.zip"
+target = release / f"{package_name}.zip"
 with zipfile.ZipFile(target, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
     for name, data in sorted(files.items()):
         archive.writestr(name, data)
@@ -77,7 +80,7 @@ with zipfile.ZipFile(target) as archive:
     for name, data in files.items():
         assert archive.read(name) == data
     assert all(not name.startswith("/") and ".." not in Path(name).parts for name in archive.namelist())
-(release / "CoverPlayer-Switch-1.0.0-alpha5.nro").write_bytes(nro)
-(release / "CoverPlayer-Switch-1.0.0-alpha5.zip.sha256").write_text(
+(release / f"{package_name}.nro").write_bytes(nro)
+(release / f"{package_name}.zip.sha256").write_text(
     f"{hashlib.sha256(target.read_bytes()).hexdigest()}  {target.name}\n", encoding="ascii")
 print(f"Verified Switch NRO, embedded assets and {len(files)} package files: {target}")

@@ -1,6 +1,11 @@
 cmake_minimum_required(VERSION 3.18)
 
-project(CoverPlayer VERSION 1.0.0 LANGUAGES CXX)
+file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/VERSION" COVERPLAYER_VERSION_PARTS)
+list(GET COVERPLAYER_VERSION_PARTS 0 COVERPLAYER_BASE_VERSION)
+list(GET COVERPLAYER_VERSION_PARTS 1 COVERPLAYER_SWITCH_ALPHA)
+project(CoverPlayer VERSION ${COVERPLAYER_BASE_VERSION} LANGUAGES CXX)
+set(COVERPLAYER_NACP_VERSION "${PROJECT_VERSION}-sw-a${COVERPLAYER_SWITCH_ALPHA}")
+configure_file(cmake/version.hpp.in generated/coverplayer_version.hpp @ONLY)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -144,7 +149,7 @@ add_executable(coverplayer
     src/platform/sdl/sdl_input.cpp
     src/platform/native_file_system.cpp
 )
-target_include_directories(coverplayer PRIVATE include src)
+target_include_directories(coverplayer PRIVATE include src "${CMAKE_CURRENT_BINARY_DIR}/generated")
 if(NINTENDO_SWITCH)
     target_compile_definitions(coverplayer PRIVATE COVERPLAYER_SWITCH_UI=1)
 endif()
@@ -188,7 +193,7 @@ if(NINTENDO_SWITCH)
     configure_file(assets/fonts/RobotoMono-Bold.ttf
         "${COVERPLAYER_ROMFS}/assets/fonts/RobotoMono-Bold.ttf" COPYONLY)
     nx_generate_nacp(OUTPUT CoverPlayer.nacp NAME "CoverPlayer"
-        AUTHOR "heilmic" VERSION "${PROJECT_VERSION}-sw-a5")
+        AUTHOR "heilmic" VERSION "${COVERPLAYER_NACP_VERSION}")
     nx_create_nro(coverplayer OUTPUT CoverPlayer.nro
         NACP "${CMAKE_CURRENT_BINARY_DIR}/CoverPlayer.nacp"
         ICON "${CMAKE_CURRENT_SOURCE_DIR}/packaging/switch/icon.jpg"

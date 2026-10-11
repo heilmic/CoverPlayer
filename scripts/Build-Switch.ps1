@@ -11,4 +11,5 @@ if (!$pythonCommand) { throw 'Python 3 is required.' }
 if ($LASTEXITCODE -ne 0) { throw 'Switch cross-build failed.' }
 & $pythonCommand.Source "$PSScriptRoot/package-switch.py" --docker-image $DockerImage
 if ($LASTEXITCODE -ne 0) { throw 'Switch package verification failed.' }
-Write-Host "Switch package: $repositoryRoot/build/release/CoverPlayer-Switch-1.0.0-alpha5.zip"
+$versionParts = Get-Content -LiteralPath "$repositoryRoot/VERSION"
+Write-Host "Switch package: $repositoryRoot/build/release/CoverPlayer-Switch-$($versionParts[0])-alpha$($versionParts[1]).zip"

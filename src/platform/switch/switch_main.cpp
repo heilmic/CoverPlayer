@@ -4,6 +4,7 @@
 #include "persistence/file_progress_store.hpp"
 #include "platform/native_file_system.hpp"
 #include "platform/switch/switch_platform.hpp"
+#include "coverplayer_version.hpp"
 
 #include <cstdio>
 #include <exception>
@@ -21,7 +22,7 @@ int main(int, char**) {
             throw std::runtime_error("Cannot open sdmc:/config/coverplayer");
         std::freopen("coverplayer.log", "w", stderr);
         std::setvbuf(stderr, nullptr, _IONBF, 0);
-        std::fprintf(stderr, "CoverPlayer Switch alpha 4: state=sdmc:/config/coverplayer\n");
+        std::fprintf(stderr, "CoverPlayer " COVERPLAYER_SWITCH_VERSION ": state=sdmc:/config/coverplayer\n");
         const Result romfsResult = romfsInit();
         if (R_FAILED(romfsResult)) throw std::runtime_error("Cannot mount bundled assets");
         struct RomfsGuard { ~RomfsGuard() { romfsExit(); } } romfs;
