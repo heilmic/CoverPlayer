@@ -8,8 +8,16 @@ Knulli is the primary platform, with muOS packages also available.
 
 Packaging addendum: `CoverPlayer-Knulli-Category.zip` is a complete alternative
 Knulli download with a dedicated main-menu category, illustrated setup guide
-and optional Art Book Next SVG player icon. It reuses the regular app payload
+and Art Book Next SVG player logo. It reuses the regular app payload
 and saved data. [Setup and screenshots](docs/knulli-category.md).
+
+### October 11 update: category logo
+
+The category ZIP now includes a category-specific Art Book Next theme integration:
+the proportional player symbol sits beside a two-line Cover / Player wordmark
+in the normal logo area. No Custom logo setting is required. The illustrated
+guide explains the integration and how to inherit another theme instead.
+Application binaries and the historical v1.0.0 tag remain unchanged.
 
 ### October 10 update: Switch alpha and album playback
 

@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<theme>
+  <formatVersion>7</formatVersion>
+  <!-- Reuse Art Book Next without changing global theme settings or firmware files. -->
+  <variables>
+    <coverPlayerUserThemePath>/userdata/themes/es-theme-art-book-next</coverPlayerUserThemePath>
+    <themePath>/usr/share/emulationstation/themes/es-theme-art-book-next</themePath>
+    <themePath if='exists({coverPlayerUserThemePath} + "/theme.xml")'>${coverPlayerUserThemePath}</themePath>
+  </variables>
+  <include>${themePath}/theme.xml</include>
+  <view name="basic,detailed,grid,video">
+    <image name="logo">
+      <path>/userdata/roms/coverplayer/coverplayer-logo.svg</path>
+    </image>
+  </view>
+  <view name="system">
+    <image name="system-logo" extra="true">
+      <path>/userdata/roms/coverplayer/coverplayer-logo.svg</path>
+      <visible>true</visible>
+    </image>
+    <text name="system-name" extra="true">
+      <visible>false</visible>
+    </text>
+  </view>
+  <view name="basic,detailed">
+    <text name="logoText" extra="true">
+      <visible>false</visible>
+    </text>
+  </view>
+</theme>

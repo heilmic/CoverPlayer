@@ -3,7 +3,7 @@
 ## Using CoverPlayer
 
 - [Installation, controls and troubleshooting](../packaging/README.md)
-- [Knulli main-menu category and optional player icon](knulli-category.md)
+- [Knulli main-menu category and player logo](knulli-category.md)
 - [Nintendo Switch alpha: install, build and overlay prospects](switch.md)
 - [Background playback and game volume](coverflow-audio-update.md)
 - [Screen dimming, standby and firmware compatibility](playback-power-saving.md)

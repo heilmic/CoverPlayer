@@ -69,7 +69,7 @@ Existing tags are not replaced. A source push alone does not publish a release;
 a successful dry run does not prove that remote publication has succeeded.
 
 The category ZIP reuses every file from the regular Knulli ZIP and adds a user
-system overlay, wrapper, optional SVG and illustrated guide. To package it
+system overlay, wrapper, category theme, SVG logo and illustrated guide. To package it
 without rebuilding the app, run `python scripts/build-knulli-category.py` with
 the existing `build/release/CoverPlayer-Knulli.zip`. Its root manifest is rebuilt
 and both archives are verified. Use `--base` and `--output` to select other paths.

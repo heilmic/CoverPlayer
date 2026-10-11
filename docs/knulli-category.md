@@ -22,31 +22,31 @@ The existing Ports entry remains available. Both entries use
 CoverPlayer-Test remains separate. Installing this package over the regular
 package updates that installation; it does not create another player copy.
 
-## Optional player icon: Art Book Next
+## Category logo: Art Book Next
 
-The ZIP includes an original, white SVG MP3-player symbol with a CoverPlayer
-wordmark underneath, stored under
-`theme-customizations/art-book-next/logos/coverplayer.svg` (Apache-2.0).
-It uses basic vector shapes and outlined Roboto Mono Bold lettering, so it
-needs no installed fonts. The font's Apache-2.0 license is included with the app.
+The category shows a white MP3-player symbol on the left and **Cover** / **Player**
+on two lines on the right. It uses the normal logo area and keeps the theme's
+background artwork. **System Logos → Custom is not required.**
 
-![Optional player symbol in Art Book Next](screenshots/knulli-category-icon.png)
+![CoverPlayer logo in Art Book Next](screenshots/knulli-category-icon.png)
 
-With **Art Book Next** selected, open its theme configuration and set
-**System Logos → Custom**. This activates the supplied icon. This setting
-also enables any other custom logos you already have. Leave **System Artwork**
-as it is; the screenshot uses the theme's standard background.
+The ZIP includes a small category-specific `roms/coverplayer/theme.xml` that
+inherits the installed Art Book Next theme and overrides only CoverPlayer's
+branding. It prefers an Art Book Next installation under `/userdata/themes`,
+falling back to Knulli's bundled copy. It does not change global theme settings
+or firmware files. The original SVG and outlined Roboto Mono Bold wordmark are
+Apache-2.0; the logo needs no installed fonts.
 
-The package does not change theme settings or firmware files. Other themes
-may show the category name or their own default artwork; this depends on the
-theme. The included SVG can be reused in a theme-specific integration.
-Category navigation, launch and the optional Art Book Next icon were tested
-on a Knulli RG35XX-H. Themes without a suitable fallback need their own setup.
+This integration is for **Art Book Next**, Knulli's standard theme. If you use
+another theme, remove `roms/coverplayer/theme.xml` so the category inherits your
+selected theme again. Its logo integration depends on that theme. The standalone
+`roms/coverplayer/coverplayer-logo.svg` can be reused; a compatibility copy remains
+under `theme-customizations/art-book-next/logos/coverplayer.svg`.
 
 ## Remove only the category
 
 Delete `system/configs/emulationstation/es_systems_coverplayer.cfg` and
 `roms/coverplayer/CoverPlayer.sh` plus `roms/coverplayer/gamelist.xml`.
 Remove `roms/coverplayer` if it is empty, then update the game lists.
-The optional SVG can also be removed. Keep `roms/ports/CoverPlayer/`, its
+The category-specific `theme.xml` and SVG can also be removed. Keep `roms/ports/CoverPlayer/`, its
 Ports launcher, your media and saved application data.

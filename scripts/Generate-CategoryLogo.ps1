@@ -8,14 +8,24 @@ $fonts = [Drawing.Text.PrivateFontCollection]::new()
 $outline = [Drawing.Drawing2D.GraphicsPath]::new()
 try {
     $fonts.AddFontFile((Join-Path $repositoryRoot 'assets/fonts/RobotoMono-Bold.ttf'))
-    $outline.AddString('CoverPlayer', $fonts.Families[0], [int][Drawing.FontStyle]::Bold,
-        64, [Drawing.PointF]::new(0, 0), [Drawing.StringFormat]::GenericTypographic)
-    $bounds = $outline.GetBounds()
-    $matrix = [Drawing.Drawing2D.Matrix]::new()
-    try {
-        $matrix.Translate((480 - $bounds.Width) / 2 - $bounds.X, 350 - $bounds.Y)
-        $outline.Transform($matrix)
-    } finally { $matrix.Dispose() }
+    foreach ($line in @(
+        @{ Text = 'Cover'; Top = 14 },
+        @{ Text = 'Player'; Top = 96 }
+    )) {
+        $lineOutline = [Drawing.Drawing2D.GraphicsPath]::new()
+        $matrix = [Drawing.Drawing2D.Matrix]::new()
+        try {
+            $lineOutline.AddString($line.Text, $fonts.Families[0], [int][Drawing.FontStyle]::Bold,
+                72, [Drawing.PointF]::new(0, 0), [Drawing.StringFormat]::GenericTypographic)
+            $bounds = $lineOutline.GetBounds()
+            $matrix.Translate(126 - $bounds.X, $line.Top - $bounds.Y)
+            $lineOutline.Transform($matrix)
+            $outline.AddPath($lineOutline, $false)
+        } finally {
+            $matrix.Dispose()
+            $lineOutline.Dispose()
+        }
+    }
     $points = $outline.PathPoints
     $types = $outline.PathTypes
     $commands = [Collections.Generic.List[string]]::new()
@@ -38,22 +48,27 @@ try {
     }
     $glyphPath = $commands -join ' '
     $svg = @"
-<svg xmlns="http://www.w3.org/2000/svg" width="240" height="320" viewBox="0 0 240 320">
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="176" viewBox="0 0 400 176" preserveAspectRatio="xMidYMid meet">
   <title>CoverPlayer portable MP3 player and wordmark</title>
   <!-- Wordmark outlines use the bundled Apache-2.0 Roboto Mono Bold font. -->
-  <g transform="translate(30 0) scale(0.75)">
-    <rect x="28" y="8" width="184" height="304" rx="28" fill="none" stroke="#ffffff" stroke-width="12"/>
-    <rect x="52" y="38" width="136" height="110" rx="10" fill="none" stroke="#ffffff" stroke-width="8"/>
+  <g transform="translate(4 8) scale(0.5)">
+    <rect x="28" y="8" width="184" height="304" rx="28" fill="none" stroke="#ffffff" stroke-width="8"/>
+    <rect x="52" y="38" width="136" height="110" rx="10" fill="none" stroke="#ffffff" stroke-width="6"/>
     <path d="M112 59v51c-8-5-23-1-23 10 0 16 31 15 31-2V83l33-7v24c-8-5-23-1-23 10 0 16 31 15 31-2V49z" fill="#ffffff"/>
-    <circle cx="120" cy="226" r="49" fill="none" stroke="#ffffff" stroke-width="8"/>
+    <circle cx="120" cy="226" r="49" fill="none" stroke="#ffffff" stroke-width="6"/>
     <path d="m110 207 29 19-29 19z" fill="#ffffff"/>
   </g>
-  <path d="$glyphPath" transform="translate(0 85) scale(0.5)" fill="#ffffff"/>
+  <path d="$glyphPath" fill="#ffffff"/>
 </svg>
 "@
-    $destination = Join-Path $repositoryRoot 'packaging/knulli-category/theme-customizations/art-book-next/logos/coverplayer.svg'
-    [IO.File]::WriteAllText($destination, $svg.Replace("`r`n", "`n") + "`n", [Text.UTF8Encoding]::new($false))
-    Write-Host "Generated $destination"
+    foreach ($relativePath in @(
+        'packaging/knulli-category/roms/coverplayer/coverplayer-logo.svg',
+        'packaging/knulli-category/theme-customizations/art-book-next/logos/coverplayer.svg'
+    )) {
+        $destination = Join-Path $repositoryRoot $relativePath
+        [IO.File]::WriteAllText($destination, $svg.Replace("`r`n", "`n") + "`n", [Text.UTF8Encoding]::new($false))
+        Write-Host "Generated $destination"
+    }
 } finally {
     $outline.Dispose()
     $fonts.Dispose()
