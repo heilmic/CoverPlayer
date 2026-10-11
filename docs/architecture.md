@@ -21,8 +21,8 @@ capabilities must not prevent ordinary playback.
 `SdlPlatform` and `SwitchPlatform` compose their respective adapters and own
 SDL initialization order. Linux does not compile the Switch screen layouts or
 link Switch libraries. The optional desktop Switch preview selects only the
-Switch layout, without the device adapter. The
-application loop uses named handlers in a deliberate sequence: later handlers
+Switch layout, without the device adapter. The application loop uses named
+handlers in a deliberate sequence: later handlers
 must observe screen changes made earlier in the same frame.
 
 ## Library and persistence
