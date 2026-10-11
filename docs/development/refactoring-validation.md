@@ -15,6 +15,7 @@ All changes are local commits; no deployment, push, release or tag change occurr
 | `02cd55c` | Readable navigation fixtures and named scenario runner |
 | `53b0cab` | Architecture/preview documentation, package metadata tests, incremental version regeneration |
 | `b53ecdf` | Explicit D-pad and shoulder-button transport mapping tests |
+| `0a25f83` | Tie each navigation view assertion to the input step that produced it |
 
 The background handoff now also resolves the playing track by media ID when
 another row is selected, so it retains the album sequence. Handler dispatch
@@ -41,6 +42,13 @@ cleanup was omitted to keep the scope focused.
   passed, including fake-PulseAudio `audio_ducker_lifecycle` and isolated-filesystem
   `playback_power`. The later D-pad/shoulder test addition was rebuilt and passed
   separately on Linux as well as in the final desktop suite.
+- Follow-up review: a pre-input library-scan view made the three-track test's
+  numeric view offset observe the frame before automatic advance. The fixture
+  now records the final view for each polled input step. The complete desktop
+  suite and the targeted native Linux navigation test passed. In an isolated
+  mutation check, removing selection preservation from the application makes
+  `automaticAdvancePreservesDifferentSelection` fail; the unchanged application
+  passes. No production source was changed for this follow-up.
 - Switch source archive extracted twice (version stage and final stage), then
   configured and cross-built with tests OFF in the pinned devkitPro container.
   Only the extracted archive was mounted; no original checkout or test sources
