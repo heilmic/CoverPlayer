@@ -20,3 +20,11 @@ Open `http://127.0.0.1:8787`. Stop the server with Ctrl+C.
 - Animation has a pause button and respects reduced-motion preferences; without JavaScript, a static image is shown.
 - Artwork attribution and license links are in the footer.
 - No deployment is configured. Later, a GitHub Pages workflow can upload only `website/dist` as its Pages artifact.
+
+## Visual identity and content
+
+- Navy surfaces and restrained turquoise accents follow the app UI; amber is reserved for alpha status.
+- Header/footer reuse the existing Knulli category SVG wordmark. The favicon uses the same player symbol.
+- Family use: parents prepare MP3 collections; children choose familiar cover artwork with physical controls.
+- Knulli category package is featured alongside its actual Art Book Next screenshot and setup guide.
+- Keep copy factual and short; avoid lifestyle slogans.
