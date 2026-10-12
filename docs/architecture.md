@@ -33,10 +33,13 @@ must observe screen changes made earlier in the same frame.
   beside subfolders becomes a single-track leaf. Album names come from folders.
 - Album browsing and CoverFlow prefer explicit folder cover files over embedded
   ID3 artwork. The player prefers embedded artwork from the playing track,
-  falling back to the album cover. Invalid MP3s are skipped; metadata reads and
+  falling back to actual folder artwork, then the placeholder. Folder artwork
+  is stored separately from the library preview; Now Playing uses the current
+  track's artist. Invalid MP3s are skipped; metadata reads and
   duration estimates avoid full-file scans.
 - Versioned per-collection caches store metadata and root fingerprints. Changed
   media invalidate their collection. Config and progress use temporary-file replacement.
+  See [scanning costs and large-library behavior](library-scanning.md).
 - CoverFlow and list views share selection and hierarchy state. Progress is
   calculated from saved track positions and durations, rather than stored as a
   separate percentage. Missing roots remain configured; media are never deleted.

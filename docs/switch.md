@@ -1,6 +1,6 @@
 # Nintendo Switch alpha
 
-**1.0.0 alpha 5** · [Installation, controls and hardware checklist](../packaging/switch/README.md)
+**1.0.1 alpha 6** · [Installation, controls and hardware checklist](../packaging/switch/README.md)
 
 - Foreground NRO for Switch and Switch Lite; shared MP3 player and collections.
 - Collection creation and playback confirmed on Switch in alpha 2; alpha 5, Lite and docking validation pending.
@@ -25,7 +25,7 @@ Requires Docker and Python 3:
 ```
 
 - Uses the pinned official devkitPro image and `/opt/devkitpro/cmake/Switch.cmake`.
-- Outputs `build/release/CoverPlayer-Switch-1.0.0-alpha5.{nro,zip,zip.sha256}`.
+- Outputs `build/release/CoverPlayer-Switch-1.0.1-alpha6.{nro,zip,zip.sha256}`.
 - ZIP includes installation files, licenses, application/decoder sources and relink recipe.
 - Validates ELF/NRO structure, icon, version metadata, font and ZIP contents.
 - Shared tests: `./scripts/Build-And-Test.ps1 -SkipPackages`.

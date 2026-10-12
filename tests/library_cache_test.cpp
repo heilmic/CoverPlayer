@@ -4,6 +4,7 @@
 
 #include <chrono>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 
 int main(int, char**) {
@@ -13,6 +14,7 @@ int main(int, char**) {
     coverplayer::library::Collection leaf{"Album", "/music/Artist/Album", "cover.jpg", "Artist",
         {{"Track", "/music/Artist/Album/track.mp3", "Artist", "Album", 1, 245.5, "track-art.jpg"}}};
     coverplayer::library::Collection artist{"Artist", "/music/Artist", "cover.jpg", "", {}, {leaf}};
+    artist.children.front().folderCoverPath = "folder.jpg";
     const std::vector<coverplayer::library::Collection> tree{artist};
     if(!cache.save("/music",42,tree)){std::cerr<<"recursive cache save failed\n";return 1;}
     const auto loaded=cache.load("/music",42);
@@ -20,10 +22,15 @@ int main(int, char**) {
         loaded->front().children.front().tracks.size()!=1||
         loaded->front().children.front().tracks.front().path!="/music/Artist/Album/track.mp3"||
         loaded->front().children.front().tracks.front().durationSeconds!=245.5||
-        loaded->front().children.front().tracks.front().coverPath!="track-art.jpg"){
+        loaded->front().children.front().tracks.front().coverPath!="track-art.jpg"||
+        loaded->front().children.front().folderCoverPath!="folder.jpg"||
+        !loaded->front().folderCoverPath.empty()){
         std::cerr<<"recursive cache roundtrip failed\n";return 1;
     }
     if(cache.load("/music",43)){std::cerr<<"cache accepted a stale fingerprint\n";return 1;}
+    const auto index = std::filesystem::directory_iterator(directory)->path();
+    std::ofstream(index, std::ios::trunc) << "COVERPLAYER_LIBRARY 5\n";
+    if(cache.load("/music",42)){std::cerr<<"cache accepted an index without separate folder artwork\n";return 1;}
     cache.invalidate("/music");
     if(cache.load("/music",42)){std::cerr<<"cache invalidation failed\n";return 1;}
     std::error_code error;std::filesystem::remove_all(directory,error);

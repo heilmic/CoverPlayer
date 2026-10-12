@@ -23,7 +23,8 @@ bool writeNode(std::ostream& output, const library::Collection& node, std::size_
     if (depth > maximumDepth || node.tracks.size() > maximumTracks || node.children.size() > maximumNodes) return false;
     output << std::quoted(node.name) << ' ' << std::quoted(node.path) << ' '
         << std::quoted(node.coverPath) << ' ' << std::quoted(node.artist) << ' '
-        << node.tracks.size() << ' ' << node.children.size() << '\n';
+        << node.tracks.size() << ' ' << node.children.size() << ' '
+        << std::quoted(node.folderCoverPath) << '\n';
     for (const auto& track : node.tracks) {
         output << std::quoted(track.name) << ' ' << std::quoted(track.path) << ' '
             << std::quoted(track.artist) << ' ' << std::quoted(track.album) << ' '
@@ -37,7 +38,7 @@ bool readNode(std::istream& input, library::Collection& node, std::size_t depth,
     if (depth > maximumDepth || ++nodesRead > maximumNodes) return false;
     std::size_t trackTotal = 0, childTotal = 0;
     if (!(input >> std::quoted(node.name) >> std::quoted(node.path) >> std::quoted(node.coverPath)
-        >> std::quoted(node.artist) >> trackTotal >> childTotal) ||
+        >> std::quoted(node.artist) >> trackTotal >> childTotal >> std::quoted(node.folderCoverPath)) ||
         trackTotal > maximumTracks || childTotal > maximumNodes) return false;
     node.tracks.reserve(trackTotal);
     for (std::size_t index = 0; index < trackTotal; ++index) {
@@ -66,7 +67,7 @@ std::filesystem::path FileLibraryCache::pathFor(const std::string& root) const {
 std::optional<std::vector<library::Collection>> FileLibraryCache::load(const std::string& root, std::uint64_t fingerprint) {
     std::ifstream input(pathFor(root));
     std::string header, cachedRoot; std::uint64_t cachedFingerprint = 0;
-    if (!std::getline(input, header) || header != "COVERPLAYER_LIBRARY 5" ||
+    if (!std::getline(input, header) || header != "COVERPLAYER_LIBRARY 6" ||
         !(input >> std::quoted(cachedRoot) >> cachedFingerprint) || cachedRoot != root ||
         cachedFingerprint != fingerprint) return std::nullopt;
     std::size_t nodeTotal = 0;
@@ -83,7 +84,7 @@ bool FileLibraryCache::save(const std::string& root, std::uint64_t fingerprint,
     const auto target = pathFor(root); const auto temporary = std::filesystem::path(target.string() + ".tmp");
     {
         std::ofstream output(temporary, std::ios::trunc);
-        output << "COVERPLAYER_LIBRARY 5\n" << std::quoted(root) << ' ' << fingerprint << '\n'
+        output << "COVERPLAYER_LIBRARY 6\n" << std::quoted(root) << ' ' << fingerprint << '\n'
             << collections.size() << '\n';
         for (const auto& node : collections) if (!writeNode(output, node, 0)) return false;
         output.flush(); if (!output) return false;

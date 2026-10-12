@@ -12,6 +12,8 @@ struct Collection {
     std::string artist;
     std::vector<Track> tracks;
     std::vector<Collection> children;
+    // Actual artwork in this directory, independent of the browser preview.
+    std::string folderCoverPath;
 };
 using ScanProgress = std::function<void(std::size_t, const std::string&)>;
 class LibraryScanner { public: explicit LibraryScanner(const platform::FileSystem& fileSystem); [[nodiscard]] std::vector<Collection> scan(const std::string& root, ScanProgress progress = {}) const; private: const platform::FileSystem& fileSystem_; };

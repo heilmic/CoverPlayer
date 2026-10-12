@@ -1,5 +1,25 @@
 # Releases
 
+## v1.0.1 — Now Playing metadata fixes
+
+- Now Playing displays the current track's artist, including after manual
+  track changes and automatic advance. Tracks without an artist tag no longer
+  inherit another track's artist.
+- Artwork falls back from the current track's embedded image to actual artwork
+  in its folder, then to the placeholder. The library preview may still use an
+  embedded image, but that image is never borrowed for another playing track.
+- Library cache v6 stores folder artwork separately. Existing indexes rebuild
+  once after updating; collections and playback progress are preserved. Large
+  libraries can take several minutes during that first rebuild.
+- Includes rebuilt Knulli, Knulli Test, Knulli Category, muOS and experimental
+  Switch alpha 6 packages from the same source revision.
+- Regression coverage checks mixed artists, missing tags, folder artwork,
+  missing artwork, manual forward/back and automatic advance. Windows runtime
+  validation uses the actual SDL renderer and MP3 player with scripted actions;
+  Knulli/muOS/Switch hardware validation of this update remains pending.
+
+Fixes [#1](https://github.com/heilmic/CoverPlayer/issues/1).
+
 ## v1.0.0 — First Stable Release
 
 CoverPlayer reaches its first stable milestone: an offline MP3 player for

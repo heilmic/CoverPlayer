@@ -1,4 +1,4 @@
-# CoverPlayer for Nintendo Switch — 1.0.0 alpha 5
+# CoverPlayer for Nintendo Switch — 1.0.1 alpha 6
 
 **Experimental MP3 player for Switch / Switch Lite.**
 

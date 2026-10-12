@@ -116,6 +116,7 @@ std::optional<Collection> scanDirectory(ScanContext& context, const std::string&
         leaf.name = folderName(path);
         leaf.path = path;
         leaf.coverPath = folderCover;
+        leaf.folderCoverPath = folderCover;
         leaf.artist = directTracks.front().track.artist;
         for (auto& scanned : directTracks) {
             if (leaf.coverPath.empty() && !scanned.coverPath.empty()) leaf.coverPath = scanned.coverPath;
@@ -129,6 +130,7 @@ std::optional<Collection> scanDirectory(ScanContext& context, const std::string&
         single.name = scanned.track.name;
         single.path = scanned.track.path;
         single.coverPath = scanned.coverPath.empty() ? folderCover : scanned.coverPath;
+        single.folderCoverPath = folderCover;
         single.artist = scanned.track.artist;
         single.tracks.push_back(std::move(scanned.track));
         children.push_back(std::move(single));
@@ -141,6 +143,7 @@ std::optional<Collection> scanDirectory(ScanContext& context, const std::string&
     group.name = folderName(path);
     group.path = path;
     group.coverPath = folderCover;
+    group.folderCoverPath = folderCover;
     group.children = std::move(children);
     if (group.coverPath.empty()) {
         for (const auto& child : group.children) if (!child.coverPath.empty()) {

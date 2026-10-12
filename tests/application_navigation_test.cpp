@@ -214,7 +214,7 @@ class FakeCache final : public coverplayer::library::LibraryCache {
              "two.jpg",
              "",
              {{"Chapter 1", "two-1.mp3", "", "", 1, 0, "track-one.jpg"},
-              {"Chapter 2", "two-2.mp3", "", "", 2}}}};
+              {"Chapter 2", "two-2.mp3", "", "", 2}}, {}, "two.jpg"}};
     }
     bool save(const std::string&, std::uint64_t,
               const std::vector<coverplayer::library::Collection>&) override {
@@ -877,6 +877,51 @@ int browseWithoutRestartAndSaveOutgoingProgress() {
     return 0;
 }
 
+class MixedArtistCache final : public coverplayer::library::LibraryCache {
+  public:
+    std::string folderCover;
+    std::optional<std::vector<coverplayer::library::Collection>> load(const std::string&, std::uint64_t) override {
+        coverplayer::library::Collection album{"Mixed", "library/Crime/Mixed", "alpha.jpg", "Alpha",
+            {{"First", "first.mp3", "Alpha", "Mixed", 1, 60, "alpha.jpg"},
+             {"Second", "second.mp3", "Beta", "Mixed", 2, 60, ""},
+             {"Third", "third.mp3", "", "Mixed", 3, 60, "gamma.jpg"},
+             {"Fourth", "fourth.mp3", "Delta", "Mixed", 4, 60, ""}}};
+        album.folderCoverPath = folderCover;
+        return std::vector<coverplayer::library::Collection>{album};
+    }
+    bool save(const std::string&, std::uint64_t, const std::vector<coverplayer::library::Collection>&) override { return true; }
+    void invalidate(const std::string&) override {}
+};
+
+int nowPlayingUsesTrackMetadata() {
+    for (const std::string folderCover : {std::string{}, std::string{"folder.jpg"}}) {
+        Fixture<MixedArtistCache> f;
+        f.cache.folderCover = folderCover;
+        f.platform.append(openBook);
+        const auto first = f.platform.append(play);
+        const auto second = f.platform.append(input(&InputActions::changeTrack, 1));
+        const auto third = f.platform.append(input(&InputActions::changeTrack, 1));
+        const auto fourth = f.platform.append({}, [&] { f.audio.finished = true; });
+        const auto previous = f.platform.append(input(&InputActions::changeTrack, -1));
+        f.platform.append(quit);
+        f.run();
+        const auto& a = f.platform.viewAfter(first);
+        const auto& b = f.platform.viewAfter(second);
+        const auto& c = f.platform.viewAfter(third);
+        const auto& d = f.platform.viewAfter(fourth);
+        const auto& back = f.platform.viewAfter(previous);
+        if (a.title != "First" || a.subtitle != "Mixed  -  Alpha  |  TITEL 1/4" || a.coverPath != "alpha.jpg" ||
+            b.title != "Second" || b.subtitle != "Mixed  -  Beta  |  TITEL 2/4" || b.coverPath != folderCover ||
+            c.title != "Third" || c.subtitle != "Mixed  |  TITEL 3/4" || c.coverPath != "gamma.jpg" ||
+            d.title != "Fourth" || d.subtitle != "Mixed  -  Delta  |  TITEL 4/4" || d.coverPath != folderCover ||
+            back.title != "Third" || back.subtitle != c.subtitle || back.coverPath != "gamma.jpg") {
+            std::cerr << "Now Playing retained another track's artist or embedded artwork\n";
+            return 1;
+        }
+    }
+    return 0;
+}
+
 int automaticAdvanceDoesNotReopen() {
     Fixture<> f;
     f.playFirstTrack();
@@ -1029,6 +1074,7 @@ int backgroundUsesPlayingIdentityWhileBrowsing() {
 
 int main() {
     const std::pair<const char*, int (*)()> scenarios[] = {
+        {"nowPlayingUsesTrackMetadata", nowPlayingUsesTrackMetadata},
         {"backgroundUsesPlayingIdentityWhileBrowsing", backgroundUsesPlayingIdentityWhileBrowsing},
         {"pauseSuspendResumeAndSleepTimer", pauseSuspendResumeAndSleepTimer},
         {"transportBoundariesAndSeek", transportBoundariesAndSeek},

@@ -656,10 +656,10 @@ void Application::publishPlayer() {
     if (index) {
         const auto& track = album->tracks[*index];
         view.title = track.name;
-        view.subtitle = album->name + (album->artist.empty() ? "" : "  -  " + album->artist) +
+        view.subtitle = album->name + (track.artist.empty() ? "" : "  -  " + track.artist) +
             "  |  " + (language_ == Language::English ? "TRACK" : t("TITEL")) + " " +
             std::to_string(*index + 1) + "/" + std::to_string(album->tracks.size());
-        view.coverPath = track.coverPath.empty() ? album->coverPath : track.coverPath;
+        view.coverPath = track.coverPath.empty() ? album->folderCoverPath : track.coverPath;
     } else view.title = currentTrackName_.empty() ? t("WIEDERGABE") : currentTrackName_;
     view.message = lastError_;
     platform_.setView(std::move(view));

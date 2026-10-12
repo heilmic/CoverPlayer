@@ -22,7 +22,7 @@
 
 | Platform | Status |
 | --- | --- |
-| Knulli | Primary platform; **1.0.0 stable**. Optional [main-menu category](docs/knulli-category.md). |
+| Knulli | Primary platform; **1.0.1 stable**. Optional [main-menu category](docs/knulli-category.md). |
 | muOS | Library browsing and background playback. |
 | [Switch / Switch Lite](packaging/switch/README.md) | **Alpha 5**, 1280 × 720 UI. Earlier Switch playback confirmed; alpha 5, Lite and docking checks pending. |
 
