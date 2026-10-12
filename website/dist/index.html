@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="CoverPlayer bringt deine MP3-Sammlung auf deinen Handheld. CoverFlow, Hörbücher und Hintergrundmusik für Knulli, muOS und experimentell Nintendo Switch.">
+  <meta name="theme-color" content="#101210">
+  <title>CoverPlayer — Deine Musik. Dein Handheld.</title>
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+<a class="skip" href="#main">Zum Inhalt</a>
+<header class="wrap header">
+  <a class="brand" href="#" aria-label="CoverPlayer Startseite"><span class="brand-icon" aria-hidden="true">▶</span>CoverPlayer</a>
+  <nav aria-label="Hauptnavigation"><a href="#features">Features</a><a href="#start">So geht’s</a><a class="nav-download" href="#download">Download <span aria-hidden="true">↗</span></a></nav>
+</header>
+<main id="main">
+  <section class="wrap hero" aria-labelledby="hero-title">
+    <div class="hero-copy"><p class="eyebrow"><span class="status-dot"></span> OFFLINE. OPEN SOURCE. DEINE SAMMLUNG.</p>
+      <h1 id="hero-title">Deine Musik.<br>Dein <em>Handheld.</em></h1>
+      <p class="intro">Aus der Spielekonsole wird dein MP3-Player. Blättere durch Alben, hör dein Hörbuch weiter oder lass Musik beim Spielen laufen.</p>
+      <div class="actions"><a class="button" href="#download">Für deinen Handheld <span aria-hidden="true">↓</span></a><a class="text-link" href="https://github.com/heilmic/CoverPlayer">Auf GitHub ansehen ↗</a></div>
+      <p class="hero-note">Knulli <span>·</span> muOS <span>·</span> Nintendo Switch <small>ALPHA</small></p>
+    </div>
+    <figure class="hero-demo"><div class="demo-top"><span><i></i> COVERPLAYER</span><span>DEINE BIBLIOTHEK</span></div>
+      <img id="coverflow" src="assets/coverflow.png" width="640" height="480" alt="CoverPlayer mit einer durchblätterbaren Sammlung von Musik- und Hörspielcovern">
+      <figcaption><span>Die echte Oberfläche. Deine eigenen Alben.</span><button id="motion" type="button" aria-pressed="false" hidden>Animation starten</button></figcaption>
+    </figure>
+  </section>
+  <section id="features" class="feature-section"><div class="wrap">
+    <div class="section-heading"><p class="eyebrow">MEHR HÖREN. WENIGER SUCHEN.</p><h2>Alles dabei, was du zum Hören brauchst.</h2></div>
+    <div class="features">
+      <article><span class="feature-number">01 / SAMMLUNG</span><h3>Alben zum Durchblättern.</h3><p>CoverFlow oder Liste. Musik, Hörbücher und Podcasts in eigenen Ordner-Sammlungen.</p></article>
+      <article><span class="feature-number">02 / WEITERHÖREN</span><h3>Zurück an deiner Stelle.</h3><p>Wiedergabepositionen und Lesezeichen. Mit automatischem Titelwechsel und Sleep-Timer.</p></article>
+      <article><span class="feature-number">03 / NEBENBEI</span><h3>Dein Sound zum Spiel.</h3><p>Hintergrundwiedergabe auf Knulli und muOS. Knulli senkt dabei den Spielton ab.</p></article>
+      <article><span class="feature-number">04 / BEDIENUNG</span><h3>Für Tasten gemacht.</h3><p>Mit Steuerkreuz und Buttons durch die Sammlung. Hilfe direkt in der App, auf Deutsch und Englisch.</p></article>
+      <article><span class="feature-number">05 / ARTWORK</span><h3>Jeder Track mit Gesicht.</h3><p>Albumcover in der Übersicht, eingebettete Titelcover im Player. Beim Stöbern läuft die Musik weiter.</p></article>
+      <article><span class="feature-number">06 / OFFLINE</span><h3>Einfach deine MP3s.</h3><p>Eigene Dateien statt Streaming. Auf unterstützter Firmware dimmt der Bildschirm beim Hören.</p></article>
+    </div>
+  </div></section>
+  <section class="wrap inside" aria-labelledby="inside-title">
+    <div class="inside-copy"><p class="eyebrow">AUF DAS WESENTLICHE KONZENTRIERT</p><h2 id="inside-title">Ein Platz für<br>deine Sammlung.</h2><p>Vom Lieblingsalbum bis zum nächsten Kapitel. Große Cover, klare Listen und die wichtigsten Tasten immer im Blick.</p><a class="text-link" href="https://github.com/heilmic/CoverPlayer/blob/main/docs/screenshots/generated/README.md">Alle Screenshots ansehen ↗</a></div>
+    <figure><img src="assets/player.png" width="640" height="480" loading="lazy" alt="Hörbuchwiedergabe mit Cover, Fortschrittsanzeige und Tastenbelegung"><figcaption>Hörbücher mit Fortschritt und Lesezeichen</figcaption></figure>
+    <figure><img src="assets/collections.png" width="640" height="480" loading="lazy" alt="Sammlungsansicht für eigene Medienordner"><figcaption>Deine Ordner, übersichtlich gesammelt</figcaption></figure>
+  </section>
+  <section id="download" class="wrap downloads">
+    <div class="section-heading"><p class="eyebrow">BEREIT ZUM LOSHÖREN?</p><h2>Wähle deinen Handheld.</h2><p>Die Downloads liegen bei GitHub. Wähle dort das passende Paket.</p></div>
+    <div class="platforms">
+      <article class="platform recommended"><div class="platform-top"><span>LINUX HANDHELDS</span><span class="badge">HAUPTPLATTFORM</span></div><h3>Knulli</h3><p>Musik im Hintergrund, abgesenkter Spielton und optional eine eigene Hauptmenü-Kategorie.</p><code>CoverPlayer-Knulli.zip</code><a class="button" href="https://github.com/heilmic/CoverPlayer/releases">Zu den Downloads ↗</a><a class="text-link" href="https://github.com/heilmic/CoverPlayer/blob/main/packaging/README.md#install">Installation &amp; Bedienung</a></article>
+      <article class="platform"><div class="platform-top"><span>LINUX HANDHELDS</span></div><h3>muOS</h3><p>Deine Bibliothek mit CoverFlow und Hintergrundwiedergabe, als installierbare App.</p><code>CoverPlayer.muxapp</code><a class="button secondary" href="https://github.com/heilmic/CoverPlayer/releases">Zu den Downloads ↗</a><a class="text-link" href="https://github.com/heilmic/CoverPlayer/blob/main/packaging/README.md#install">Installation &amp; Bedienung</a></article>
+      <article class="platform"><div class="platform-top"><span>NINTENDO SWITCH / LITE</span><span class="badge alpha">ALPHA</span></div><h3>Switch</h3><p>Experimenteller Homebrew-Player mit eigener 16:9-Oberfläche. Benötigt eine homebrewfähige Switch.</p><code>CoverPlayer-Switch-…-alpha….zip</code><a class="button secondary" href="https://github.com/heilmic/CoverPlayer/releases">Zur Alpha ↗</a><a class="text-link" href="https://github.com/heilmic/CoverPlayer/blob/main/packaging/switch/README.md">Installation &amp; Teststatus</a></article>
+    </div>
+    <p class="download-note">Switch: Wiedergabe in einer früheren Alpha bestätigt; aktuelle Alpha, Lite und Docking noch nicht vollständig auf Hardware geprüft. Hintergrundwiedergabe auf Switch ist nicht zugesichert.</p>
+  </section>
+  <section id="start" class="wrap getting-started"><div><p class="eyebrow">IN DREI SCHRITTEN</p><h2>Deine Dateien.<br>Schon geht’s los.</h2></div><ol><li><span>01</span><div><h3>Paket installieren</h3><p>Die Anleitung deiner Plattform führt dich durch die Installation.</p></div></li><li><span>02</span><div><h3>Musik hinzufügen</h3><p>MP3s auf die SD-Karte kopieren. Mit <kbd>Y</kbd> in der Sammlungsansicht einen Ordner hinzufügen.</p></div></li><li><span>03</span><div><h3>Auswählen und hören</h3><p>Mit <kbd>A</kbd> öffnen. Hilfe gibt’s über <kbd>Select</kbd>, auf Switch über <kbd>−</kbd>.</p></div></li></ol></section>
+  <section class="wrap project"><div><p class="eyebrow">OFFEN WEITERENTWICKELT</p><h2>Kleine App. Offener Quellcode.</h2><p>Fragen, Fehler oder Ideen? Auf GitHub geht’s weiter.</p></div><div class="project-links"><a href="https://github.com/heilmic/CoverPlayer/blob/main/docs/README.md">Anleitungen <span>↗</span></a><a href="https://github.com/heilmic/CoverPlayer/issues">Fehler &amp; Ideen <span>↗</span></a><a href="https://ko-fi.com/heilmic">Projekt unterstützen <span>↗</span></a></div></section>
+</main>
+<footer class="wrap footer"><a class="brand" href="#"><span class="brand-icon" aria-hidden="true">▶</span>CoverPlayer</a><p>MP3s gehören dir. Der Moment auch.</p><div><a href="https://github.com/heilmic/CoverPlayer/blob/main/LICENSE">Apache-2.0</a><a href="https://github.com/heilmic/CoverPlayer/blob/main/THIRD_PARTY_NOTICES.md">Drittanbieter</a><a href="https://github.com/heilmic/CoverPlayer/blob/main/docs/screenshots/demo-cover-sources.md">Bildnachweise</a></div><small>Screenshots mit Beispieldaten. Musik und Originalcover sind nicht enthalten; Coverrechte liegen bei den jeweiligen Rechteinhabern.</small></footer>
+</body>
+</html>
