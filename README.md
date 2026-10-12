@@ -2,6 +2,7 @@
 
 **Offline MP3 player for handhelds.** Music, audiobooks and podcasts, controlled with buttons.
 
+[Website](https://heilmic.github.io/CoverPlayer/) ·
 [Download](https://github.com/heilmic/CoverPlayer/releases) ·
 [Install & controls](packaging/README.md) · [Documentation](docs/README.md) ·
 [Release notes](CHANGELOG.md)

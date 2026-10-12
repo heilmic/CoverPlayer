@@ -1,6 +1,6 @@
 # CoverPlayer website
 
-Local German landing-page draft. Plain HTML, CSS and JavaScript; no build step, external fonts or runtime dependencies.
+[Live website](https://heilmic.github.io/CoverPlayer/). German project landing page. Plain HTML, CSS and JavaScript; no build step, external fonts or runtime dependencies.
 
 ## Preview
 
@@ -19,7 +19,23 @@ Open `http://127.0.0.1:8787`. Stop the server with Ctrl+C.
 - Screenshots are copies of the native German gallery in `docs/screenshots/generated/`. Refresh copies when the UI changes.
 - Animation has a pause button and respects reduced-motion preferences; without JavaScript, a static image is shown.
 - Artwork attribution and license links are in the footer.
-- No deployment is configured. Later, a GitHub Pages workflow can upload only `website/dist` as its Pages artifact.
+- GitHub Pages publishes the root of `gh-pages`; `.nojekyll` serves these files without Jekyll processing.
+- Source is maintained on `main`. Only `website/dist` is exported to the publishing branch.
+
+## Publish an update
+
+Commit and push the reviewed website changes on `main`, then run from the repository root:
+
+```powershell
+$websiteCommit = git subtree split --prefix=website/dist
+if ($LASTEXITCODE -ne 0) { throw "Website export failed" }
+git push origin "${websiteCommit}:refs/heads/gh-pages"
+if ($LASTEXITCODE -ne 0) { throw "Website push failed" }
+```
+
+GitHub deploys the branch automatically. Check the Pages build in GitHub Actions and open the live URL to verify the result. Do not force-push; fetch and resolve a divergent branch before publishing.
+
+Repository settings: **Settings → Pages → Deploy from a branch → gh-pages / (root)**.
 
 ## Visual identity and content
 

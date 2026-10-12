@@ -2,6 +2,8 @@
 
 ## Using CoverPlayer
 
+- [Project website](https://heilmic.github.io/CoverPlayer/)
+
 - [Installation, controls and troubleshooting](../packaging/README.md)
 - [Knulli main-menu category and player logo](knulli-category.md)
 - [Nintendo Switch alpha: install, build and overlay prospects](switch.md)
@@ -14,6 +16,7 @@
 - [Build, test, deploy and publish](development/README.md)
 - [Architecture overview](architecture.md)
 - [Generate screenshots and GIFs](screenshots/README.md)
+- [Website preview and publishing](../website/README.md)
 - [Roadmap and known issues](../TODO.md)
 - [Release notes](../CHANGELOG.md)
 
